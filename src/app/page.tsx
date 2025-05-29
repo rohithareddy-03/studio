@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -6,7 +7,6 @@ import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
@@ -21,12 +21,12 @@ export default function ChatPage() {
   }, [chatMessages]);
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-10rem)]  bg-card rounded-lg shadow-xl border overflow-hidden">
-      <aside className="w-full md:w-1/4 lg:w-1/5 bg-background/50 md:h-full overflow-y-auto">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-12rem)] md:h-[calc(100vh-10rem)] bg-transparent rounded-lg border border-border overflow-hidden"> {/* Removed shadow-xl, bg-card. Adjusted height for more whitespace from layout padding */}
+      <aside className="w-full md:w-1/4 lg:w-1/5 bg-background md:border-r border-border md:h-full overflow-y-auto"> {/* bg-background/50 changed to bg-background, added border-r */}
         <DatasetSelector />
       </aside>
       <section className="flex flex-col flex-grow h-full">
-        <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
+        <ScrollArea className="flex-grow p-4 sm:p-6" ref={scrollAreaRef}> {/* Increased padding */}
           {chatMessages.length === 0 && !isCatalogLoading && (
              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <AlertCircle size={48} className="mb-4" />

@@ -1,3 +1,4 @@
+
 // src/components/admin/FileUpload.tsx
 "use client";
 
@@ -31,7 +32,7 @@ export function FileUpload() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 p-6 border rounded-lg shadow-sm bg-card">
+    <form onSubmit={handleSubmit} className="space-y-6 p-6 border border-border rounded-lg bg-card"> {/* Removed shadow-sm */}
       <div>
         <Label htmlFor="file-upload-input" className="text-lg font-semibold">Upload Catalog File</Label>
         <p className="text-sm text-muted-foreground mt-1">
@@ -45,7 +46,7 @@ export function FileUpload() {
           type="file"
           accept=".xlsx"
           onChange={handleFileChange}
-          className="file:text-primary file:font-semibold file:bg-primary/10 hover:file:bg-primary/20"
+          className="file:text-primary file:font-semibold file:bg-primary/5 hover:file:bg-primary/10" // More subtle file input styling
           disabled={isLoading}
         />
         {file && <p className="text-sm text-muted-foreground">Selected file: {file.name}</p>}
