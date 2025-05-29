@@ -7,17 +7,17 @@ export interface BaseMetadata {
 }
 
 export interface RawDataset {
-  Dataset_name: string;
+  Dataset_name: string; // Primary key for this dataset
   Dataset_description?: string;
   Tags?: string;
-  source?: string; // Changed from SOURCE to source
+  source?: string; 
   location?: string;
 }
 
 export interface RawTable {
-  TABLE_NAME: string;
-  Dataset_name: string;
-  source?: string; // Changed from SOURCE to source
+  TABLE_NAME: string; // Primary key for this table (within its dataset)
+  Dataset_name: string; // Foreign key linking to RawDataset.Dataset_name
+  source?: string; 
   location?: string;
   DATABASE_NAME?: string;
   SCHEMA_NAME?: string;
@@ -33,15 +33,15 @@ export interface RawTable {
 }
 
 export interface RawColumn {
-  TABLE_NAME: string;
-  COLUMN_NAME: string;
+  TABLE_NAME: string; // Foreign key linking to RawTable.TABLE_NAME
+  COLUMN_NAME: string; // Primary key for this column (within its table)
   DATA_TYPE?: string;
   PRIMARY_KEY?: 'true' | 'false' | boolean | string;
   FOREIGN_KEY?: 'true' | 'false' | boolean | string;
-  column_description?: string; // Changed from description to column_description
+  column_description?: string; 
   Column_tags?: string;
   Sensitivity?: string;
-  location?: string; // Added location for columns
+  location?: string; 
 }
 
 // Enriched types - these are what we'll primarily use in the app
@@ -88,4 +88,3 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
 }
-
