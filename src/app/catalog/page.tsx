@@ -44,7 +44,7 @@ const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: ()
         {table.description || "No description available."}
       </CardDescription>
     </CardHeader>
-    <CardContent className="p-4 pt-2 text-xs space-y-1.5 text-muted-foreground"> {/* Adjusted pt and space-y */}
+    <CardContent className="p-4 pt-2 text-xs space-y-1.5 text-muted-foreground">
         <div className="flex items-center gap-1.5">Rows: {table.rowCount ?? 'N/A'}</div>
         <div className="flex items-center gap-1.5">Sensitivity: <SensitivityBadge level={table.sensitivity} /></div>
     </CardContent>
@@ -58,15 +58,15 @@ const ColumnListItem = ({ column }: { column: EnrichedColumn }) => (
         <Columns size={14} className="text-primary/80" />
         {column.name}
       </CardTitle>
-      <CardDescription className="text-xs mt-0.5"> {/* Adjusted mt */}
+      <CardDescription className="text-xs mt-0.5">
         Data Type: {column.dataType || "N/A"}
       </CardDescription>
     </CardHeader>
-    <CardContent className="p-3 pt-1.5 text-xs space-y-1"> {/* Adjusted pt */}
+    <CardContent className="p-3 pt-1.5 text-xs space-y-1">
       {column.description && <p className="text-muted-foreground line-clamp-2">Desc: {column.description}</p>}
       <div className="flex items-center gap-1.5">Sensitivity: <SensitivityBadge level={column.sensitivity} /></div>
       {(column.isPrimaryKey || column.isForeignKey) && (
-        <div className="flex gap-2 pt-0.5"> {/* Added pt */}
+        <div className="flex gap-2 pt-0.5">
           {column.isPrimaryKey && <span className="text-accent font-medium">PK</span>}
           {column.isForeignKey && <span className="text-accent font-medium">FK</span>}
         </div>
@@ -75,6 +75,14 @@ const ColumnListItem = ({ column }: { column: EnrichedColumn }) => (
   </Card>
 );
 
+const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => (
+  value ? (
+    <div className="text-sm">
+      <span className="font-medium text-foreground/80">{label}: </span>
+      <span className="text-muted-foreground">{String(value)}</span>
+    </div>
+  ) : null
+) // Corrected: Removed semicolon here
 
 export default function CatalogPage() {
   const {
@@ -117,7 +125,7 @@ export default function CatalogPage() {
 
   if (isLoading && !catalog) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)]"> {/* Adjusted height */}
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-xl text-muted-foreground">Loading Catalog...</p>
       </div>
@@ -126,7 +134,7 @@ export default function CatalogPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)] text-destructive"> {/* Adjusted height */}
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)] text-destructive">
         <AlertTriangle size={48} className="mb-4" />
         <p className="text-xl">Error loading catalog</p>
         <p className="text-sm">{error}</p>
@@ -134,19 +142,11 @@ export default function CatalogPage() {
     );
   }
   
-  const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => (
-    value ? (
-      <div className="text-sm">
-        <span className="font-medium text-foreground/80">{label}: </span>
-        <span className="text-muted-foreground">{String(value)}</span>
-      </div>
-    ) : null
-  )
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden"> {/* Adjusted height */}
+    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden">
       {/* Left Panel: Dataset Explorer */}
-      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col"> {/* Increased max-w slightly */}
+      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 text-foreground">Datasets</h2>
           <Input
@@ -154,10 +154,10 @@ export default function CatalogPage() {
             placeholder="Filter datasets..."
             value={datasetFilter}
             onChange={(e) => setDatasetFilter(e.target.value)}
-            className="bg-background border-input focus:border-primary h-9" // Adjusted height
+            className="bg-background border-input focus:border-primary h-9"
           />
         </div>
-        <ScrollArea className="flex-1 p-2"> {/* Adjusted padding */}
+        <ScrollArea className="flex-1 p-2">
           {filteredDatasets.length > 0 ? (
             <div className="space-y-1">
               {filteredDatasets.map(ds => (
@@ -179,7 +179,7 @@ export default function CatalogPage() {
       <main className="flex-1 flex flex-col overflow-y-auto">
         <div className="p-6 space-y-6">
           {/* Breadcrumbs */}
-          <Breadcrumb className="mb-4"> {/* Added mb */}
+          <Breadcrumb className="mb-4">
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink href="#" onClick={clearDatasetSelection} className={!selectedDataset ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}>
@@ -212,8 +212,8 @@ export default function CatalogPage() {
           </Breadcrumb>
 
           {!selectedDataset && (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-18rem)] text-muted-foreground"> {/* Adjusted height */}
-              <PackageSearch size={56} className="mb-5 opacity-50" /> {/* Changed Icon */}
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-18rem)] text-muted-foreground">
+              <PackageSearch size={56} className="mb-5 opacity-50" />
               <p className="text-xl">Select a dataset to view its details.</p>
               <p className="text-sm mt-1">Explore your data catalog by choosing a dataset from the left panel.</p>
             </div>
@@ -221,14 +221,14 @@ export default function CatalogPage() {
 
           {/* Dataset Focus View */}
           {selectedDataset && !selectedTable && (
-            <div className="space-y-6"> {/* Adjusted spacing */}
+            <div className="space-y-6">
               <Card className="bg-card shadow-none border-border">
                 <CardHeader>
                   <CardTitle className="text-2xl font-bold text-primary">{selectedDataset.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-foreground/90">{selectedDataset.description || "No description available."}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 pt-2"> {/* Added pt */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 pt-2">
                     <DetailItem label="Tags" value={selectedDataset.tags} />
                     <DetailItem label="Source" value={selectedDataset.source} />
                     <DetailItem label="Location" value={selectedDataset.location} />
@@ -245,7 +245,7 @@ export default function CatalogPage() {
                     placeholder="Filter tables..."
                     value={tableFilter}
                     onChange={(e) => setTableFilter(e.target.value)}
-                    className="max-w-xs bg-background border-input focus:border-primary h-9" // Adjusted height
+                    className="max-w-xs bg-background border-input focus:border-primary h-9"
                   />
                 </div>
                 {filteredTables.length > 0 ? (
@@ -255,7 +255,7 @@ export default function CatalogPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-center py-4">No tables found in this dataset or matching your filter.</p> {/* Added text-center and py */}
+                  <p className="text-muted-foreground text-center py-4">No tables found in this dataset or matching your filter.</p>
                 )}
               </section>
             </div>
@@ -263,14 +263,14 @@ export default function CatalogPage() {
 
           {/* Table Focus View */}
           {selectedDataset && selectedTable && (
-            <div className="space-y-6"> {/* Adjusted spacing */}
+            <div className="space-y-6">
               <Card className="bg-card shadow-none border-border">
                 <CardHeader>
                   <CardTitle className="text-2xl font-bold text-primary">{selectedTable.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-foreground/90">{selectedTable.description || "No description available."}</p>
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 pt-2"> {/* Added pt */}
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 pt-2">
                       <DetailItem label="Owner" value={selectedTable.owner} />
                       <DetailItem label="Source" value={selectedTable.source} />
                       <DetailItem label="Location" value={selectedTable.location} />
@@ -294,7 +294,7 @@ export default function CatalogPage() {
                     placeholder="Filter columns..."
                     value={columnFilter}
                     onChange={(e) => setColumnFilter(e.target.value)}
-                    className="max-w-xs bg-background border-input focus:border-primary h-9" // Adjusted height
+                    className="max-w-xs bg-background border-input focus:border-primary h-9"
                   />
                 </div>
                 {filteredColumns.length > 0 ? (
@@ -304,7 +304,7 @@ export default function CatalogPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-center py-4">No columns found in this table or matching your filter.</p> {/* Added text-center and py */}
+                  <p className="text-muted-foreground text-center py-4">No columns found in this table or matching your filter.</p>
                 )}
               </section>
             </div>
