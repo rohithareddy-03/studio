@@ -17,14 +17,14 @@ const DatasetSchema = z.object({
   Dataset_name: z.string(),
   Dataset_description: z.string().optional(),
   Tags: z.string().optional(),
-  source: z.string().optional(), // Changed from SOURCE
-  location: z.string().optional(), // Added location
+  source: z.string().optional(),
+  location: z.string().optional(),
 });
 
 const TableSchema = z.object({
   TABLE_NAME: z.string(),
   Dataset_name: z.string(),
-  source: z.string().optional(), // Changed from SOURCE
+  source: z.string().optional(),
   location: z.string().optional(),
   DATABASE_NAME: z.string().optional(),
   SCHEMA_NAME: z.string().optional(),
@@ -45,10 +45,10 @@ const ColumnSchema = z.object({
   DATA_TYPE: z.string().optional(),
   PRIMARY_KEY: z.string().optional(),
   FOREIGN_KEY: z.string().optional(),
-  column_description: z.string().optional(), // Changed from description
+  column_description: z.string().optional(),
   Column_tags: z.string().optional(),
   Sensitivity: z.string().optional(),
-  location: z.string().optional(), // Added location
+  location: z.string().optional(),
 });
 
 const EnrichMetadataInputSchema = z.object({
@@ -59,24 +59,23 @@ const EnrichMetadataInputSchema = z.object({
 
 export type EnrichMetadataInput = z.infer<typeof EnrichMetadataInputSchema>;
 
-// Output schema should mirror input, as AI will return the full structure with enrichments
 const EnrichMetadataOutputSchema = z.object({
   datasets: z.array(DatasetSchema.extend({
-    Dataset_description: z.string().describe("Enriched dataset description."), // Ensure description is string in output
+    Dataset_description: z.string().optional().describe("Enriched dataset description. Can be an empty string if no meaningful description can be generated."),
   })),
   tables: z.array(TableSchema.extend({
-    Description: z.string().describe("Enriched table description."), // Ensure description is string
-    Table_tags: z.string().describe("Enriched table tags."), // Ensure tags are string
+    Description: z.string().optional().describe("Enriched table description. Can be an empty string if no meaningful description can be generated."),
+    Table_tags: z.string().optional().describe("Enriched table tags. Can be an empty string if no meaningful tags can be generated."),
   })),
   columns: z.array(ColumnSchema.extend({
-    column_description: z.string().describe("Enriched column description."), // Ensure description is string
-    Column_tags: z.string().describe("Enriched column tags."), // Ensure tags are string
+    column_description: z.string().optional().describe("Enriched column description. Can be an empty string if no meaningful description can be generated."),
+    Column_tags: z.string().optional().describe("Enriched column tags. Can be an empty string if no meaningful tags can be generated."),
   })),
 });
 
 export type EnrichMetadataOutput = z.infer<typeof EnrichMetadataOutputSchema>;
 
-export async function enrichMetadata(input: EnrichMetadataInput): Promise<EnrichedMetadataOutput> {
+export async function enrichMetadata(input: EnrichMetadataInput): Promise<EnrichMetadataOutput> {
   return enrichMetadataFlow(input);
 }
 
@@ -112,4 +111,3 @@ const enrichMetadataFlow = ai.defineFlow(
     return output!;
   }
 );
-
