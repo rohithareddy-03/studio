@@ -15,40 +15,40 @@ import {z} from 'genkit';
 
 const DatasetSchema = z.object({
   Dataset_name: z.string(),
-  Dataset_description: z.string().optional(),
-  Tags: z.string().optional(),
-  source: z.string().optional(),
-  location: z.string().optional(),
+  Dataset_description: z.string().nullable().optional(),
+  Tags: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
 });
 
 const TableSchema = z.object({
   TABLE_NAME: z.string(),
   Dataset_name: z.string(),
-  source: z.string().optional(),
-  location: z.string().optional(),
-  DATABASE_NAME: z.string().optional(),
-  SCHEMA_NAME: z.string().optional(),
-  OWNER: z.string().optional(),
-  PRIMARY_KEYS: z.string().optional(),
-  FOREIGN_KEYS: z.string().optional(),
-  CREATED_DATE: z.string().optional(),
-  UPDATED_DATE: z.string().optional(),
-  Row_count: z.string().optional(),
-  Description: z.string().optional(),
-  Table_tags: z.string().optional(),
-  Sensitivity: z.string().optional(),
+  source: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  DATABASE_NAME: z.string().nullable().optional(),
+  SCHEMA_NAME: z.string().nullable().optional(),
+  OWNER: z.string().nullable().optional(),
+  PRIMARY_KEYS: z.string().nullable().optional(),
+  FOREIGN_KEYS: z.string().nullable().optional(),
+  CREATED_DATE: z.string().nullable().optional(),
+  UPDATED_DATE: z.string().nullable().optional(),
+  Row_count: z.string().nullable().optional(),
+  Description: z.string().nullable().optional(),
+  Table_tags: z.string().nullable().optional(),
+  Sensitivity: z.string().nullable().optional(),
 });
 
 const ColumnSchema = z.object({
   TABLE_NAME: z.string(),
   COLUMN_NAME: z.string(),
-  DATA_TYPE: z.string().optional(),
-  PRIMARY_KEY: z.string().optional(),
-  FOREIGN_KEY: z.string().optional(),
-  column_description: z.string().optional(),
-  Column_tags: z.string().optional(),
-  Sensitivity: z.string().optional(),
-  location: z.string().optional(),
+  DATA_TYPE: z.string().nullable().optional(),
+  PRIMARY_KEY: z.string().nullable().optional(), // Expect 'true'/'false' as string from Excel for AI
+  FOREIGN_KEY: z.string().nullable().optional(), // Expect 'true'/'false' as string from Excel for AI
+  column_description: z.string().nullable().optional(),
+  Column_tags: z.string().nullable().optional(),
+  Sensitivity: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
 });
 
 const EnrichMetadataInputSchema = z.object({
@@ -61,15 +61,15 @@ export type EnrichMetadataInput = z.infer<typeof EnrichMetadataInputSchema>;
 
 const EnrichMetadataOutputSchema = z.object({
   datasets: z.array(DatasetSchema.extend({
-    Dataset_description: z.string().optional().describe("Enriched dataset description. Can be an empty string if no meaningful description can be generated."),
+    Dataset_description: z.string().nullable().optional().describe("Enriched dataset description. Can be an empty string if no meaningful description can be generated."),
   })),
   tables: z.array(TableSchema.extend({
-    Description: z.string().optional().describe("Enriched table description. Can be an empty string if no meaningful description can be generated."),
-    Table_tags: z.string().optional().describe("Enriched table tags. Can be an empty string if no meaningful tags can be generated."),
+    Description: z.string().nullable().optional().describe("Enriched table description. Can be an empty string if no meaningful description can be generated."),
+    Table_tags: z.string().nullable().optional().describe("Enriched table tags. Can be an empty string if no meaningful tags can be generated."),
   })),
   columns: z.array(ColumnSchema.extend({
-    column_description: z.string().optional().describe("Enriched column description. Can be an empty string if no meaningful description can be generated."),
-    Column_tags: z.string().optional().describe("Enriched column tags. Can be an empty string if no meaningful tags can be generated."),
+    column_description: z.string().nullable().optional().describe("Enriched column description. Can be an empty string if no meaningful description can be generated."),
+    Column_tags: z.string().nullable().optional().describe("Enriched column tags. Can be an empty string if no meaningful tags can be generated."),
   })),
 });
 
@@ -102,6 +102,7 @@ const enrichMetadataFlow = ai.defineFlow(
   },
   async input => {
     // Ensure optional fields that AI should generate are indeed optional or empty strings for the prompt
+    // This sanitization handles undefined, null, or existing empty strings for the specific fields AI will enrich.
     const sanitizedInput = {
         datasets: input.datasets.map(d => ({...d, Dataset_description: d.Dataset_description || ""})),
         tables: input.tables.map(t => ({...t, Description: t.Description || "", Table_tags: t.Table_tags || ""})),
@@ -111,3 +112,4 @@ const enrichMetadataFlow = ai.defineFlow(
     return output!;
   }
 );
+
