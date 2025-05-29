@@ -4,32 +4,15 @@
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Download, Loader2, DatabaseZap, Table2, Columns, Tag, FileText, AlertTriangle, Info, CalendarDays, KeyRound, Rows, MapPin } from 'lucide-react';
+// Removed Button and related icons as actions are moved
+import { Loader2, Table2, Columns, Tag, FileText, Info, CalendarDays, KeyRound, Rows, MapPin, DatabaseZap } from 'lucide-react';
 import { SensitivityBadge } from './SensitivityBadge';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
 
 export function MetadataTreeView() {
-  const { catalog, isLoading, reEnrich } = useCatalog();
+  const { catalog, isLoading } = useCatalog(); // Removed reEnrich
 
-  const handleDownload = async () => {
-    try {
-      const response = await fetch('/api/catalog/download');
-      if (!response.ok) throw new Error('Download failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'enriched_catalog.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Download error:", error);
-      // Consider adding a toast notification for download failure
-    }
-  };
+  // Removed handleDownload as actions are moved
 
   if (isLoading && !catalog) {
     return (
@@ -42,7 +25,7 @@ export function MetadataTreeView() {
 
   if (!catalog || catalog.datasets.length === 0) {
     return (
-      <Card className="mt-6 bg-card"> {/* Updated card styling */}
+      <Card className="mt-6 bg-card">
         <CardHeader>
           <CardTitle>No Metadata Available</CardTitle>
           <CardDescription>Upload an Excel file to populate the catalog.</CardDescription>
@@ -71,16 +54,7 @@ export function MetadataTreeView() {
           <CardTitle className="text-2xl">Enriched Data Catalog (Tree View)</CardTitle>
           <CardDescription>Browse datasets, tables, and columns with their enriched metadata.</CardDescription>
         </div>
-        <div className="space-x-2">
-           <Button onClick={reEnrich} variant="outline" disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
-            Re-enrich Catalog
-          </Button>
-          <Button onClick={handleDownload} variant="default">
-            <Download className="mr-2 h-4 w-4" />
-            Download Enriched Data
-          </Button>
-        </div>
+        {/* Removed action buttons div */}
       </CardHeader>
       <CardContent className="p-4 sm:p-6"> 
         <Accordion type="multiple" className="w-full">

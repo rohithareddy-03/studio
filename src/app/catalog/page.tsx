@@ -6,11 +6,11 @@ import { DatasetListPanel } from '@/components/catalog/DatasetListPanel';
 import { DatasetDetailPanel } from '@/components/catalog/DatasetDetailPanel';
 import { ColumnDetailPanel } from '@/components/catalog/ColumnDetailPanel';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, AlertTriangle, Download, DatabaseZap } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils'; // Added missing import
+import { cn } from '@/lib/utils'; 
 
 export default function CatalogPage() {
   const { 
@@ -21,7 +21,6 @@ export default function CatalogPage() {
     error, 
     selectDataset, 
     selectTable,
-    reEnrich 
   } = useCatalog();
   
   // For responsive behavior: current view state on smaller screens
@@ -39,32 +38,12 @@ export default function CatalogPage() {
 
   const handleBack = () => {
     if (mobileView === 'columns') {
-      selectTable(null); // This will trigger useEffect to change mobileView to 'tables'
+      selectTable(null); 
     } else if (mobileView === 'tables') {
-      selectDataset(null); // This will trigger useEffect to change mobileView to 'datasets'
+      selectDataset(null); 
     }
   };
   
-  const handleDownload = async () => {
-    try {
-      const response = await fetch('/api/catalog/download');
-      if (!response.ok) throw new Error('Download failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'enriched_catalog.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Download error:", error);
-      // Consider adding a toast notification for download failure
-    }
-  };
-
-
   if (isLoading && !catalog) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
@@ -147,13 +126,7 @@ export default function CatalogPage() {
                 <h2 className="text-xl font-semibold">{selectedDataset ? selectedDataset.name : 'Select a Dataset'}</h2>
                 {selectedDataset && (
                    <div className="space-x-2">
-                    <Button variant="outline" size="sm" onClick={handleDownload}>
-                        <Download className="mr-2 h-4 w-4" /> Download
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={reEnrich} disabled={isLoading}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
-                        Re-Enrich
-                    </Button>
+                     {/* Removed Download and Re-Enrich buttons */}
                      <Button variant="outline" size="sm" disabled>Edit</Button> {/* Placeholder */}
                    </div>
                 )}
