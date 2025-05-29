@@ -1,7 +1,7 @@
 
 // src/lib/catalog-store.ts
 import type { CatalogData, EnrichedDataset, EnrichedTable, EnrichedColumn, RawDataset, RawTable, RawColumn } from '@/types';
-import { enrichMetadata as enrichMetadataAI, type EnrichMetadataInput } from '@/ai/flows/enrich-metadata-on-upload';
+import { enrichMetadata as enrichMetadataAI, type EnrichMetadataInput, type EnrichMetadataOutput } from '@/ai/flows/enrich-metadata-on-upload';
 
 // This is a simple in-memory store. Data will be lost when the server restarts.
 // For a production environment, consider a persistent storage solution.
@@ -16,8 +16,7 @@ export async function initializeCatalog(rawDatasets: RawDataset[], rawTables: Ra
   };
 
   try {
-    const enriched = await enrichMetadataAI(rawDataForEnrichment);
-    
+    const enriched: EnrichMetadataOutput = await enrichMetadataAI(rawDataForEnrichment);
     catalog = transformEnrichedDataToCatalog(enriched.datasets, enriched.tables, enriched.columns);
     return catalog;
   } catch (error) {
@@ -34,7 +33,7 @@ export async function reEnrichCatalog(): Promise<CatalogData | null> {
     return null;
   }
   try {
-    const enriched = await enrichMetadataAI(rawDataForEnrichment);
+    const enriched: EnrichMetadataOutput = await enrichMetadataAI(rawDataForEnrichment);
     catalog = transformEnrichedDataToCatalog(enriched.datasets, enriched.tables, enriched.columns);
     return catalog;
   } catch (error) {
@@ -57,15 +56,16 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
             dataType: rc.DATA_TYPE,
             isPrimaryKey: rc.PRIMARY_KEY === 'true' || rc.PRIMARY_KEY === true,
             isForeignKey: rc.FOREIGN_KEY === 'true' || rc.FOREIGN_KEY === true,
-            description: rc.description, // Uses RawColumn.description
-            tags: rc.Column_tags,      // Uses RawColumn.Column_tags
+            description: rc.column_description, // Use column_description
+            tags: rc.Column_tags,
             sensitivity: rc.Sensitivity || 'unknown',
+            location: rc.location, // Added location for columns
           }));
         return {
           id: `${rd.Dataset_name}/${rt.TABLE_NAME}`,
           name: rt.TABLE_NAME,
-          source: rt.SOURCE,
-          location: rt.LOCATION,
+          source: rt.source, // Use raw source
+          location: rt.location, // Use raw location
           databaseName: rt.DATABASE_NAME,
           schemaName: rt.SCHEMA_NAME,
           owner: rt.OWNER,
@@ -74,8 +74,8 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
           createdDate: rt.CREATED_DATE,
           updatedDate: rt.UPDATED_DATE,
           rowCount: rt.Row_count ? parseInt(rt.Row_count, 10) : undefined,
-          description: rt.Description, // Uses RawTable.Description
-          tags: rt.Table_tags,        // Uses RawTable.Table_tags
+          description: rt.Description,
+          tags: rt.Table_tags,
           sensitivity: rt.Sensitivity || 'unknown',
           columns: tableColumns,
         };
@@ -86,7 +86,8 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
       name: rd.Dataset_name,
       description: rd.Dataset_description,
       tags: rd.Tags,
-      source: rd.SOURCE,
+      source: rd.source, // Use raw source
+      location: rd.location, // Use raw location
       sensitivity: 'unknown', // Dataset level sensitivity not in raw, can be added or derived
       tables: datasetTables,
     };
@@ -96,9 +97,9 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
 
 
 function transformEnrichedDataToCatalog(
-  enrichedDatasets: RawDataset[], // AI output uses Raw types as per its schema
-  enrichedTables: RawTable[],
-  enrichedColumns: RawColumn[]
+  enrichedDatasets: RawDataset[], // AI output schema matches RawDataset (with optional location, source)
+  enrichedTables: RawTable[],   // AI output schema matches RawTable
+  enrichedColumns: RawColumn[]  // AI output schema matches RawColumn (with optional location, column_description)
 ): CatalogData {
   const datasetsMap = new Map<string, EnrichedDataset>();
 
@@ -106,10 +107,11 @@ function transformEnrichedDataToCatalog(
     datasetsMap.set(ed.Dataset_name, {
       id: ed.Dataset_name,
       name: ed.Dataset_name,
-      description: ed.Dataset_description,
+      description: ed.Dataset_description, // Enriched by AI
       tags: ed.Tags,
-      source: ed.SOURCE,
-      sensitivity: 'unknown', // AI Schema for Dataset does not include Sensitivity
+      source: ed.source, // From input, preserved by AI
+      location: ed.location, // From input, preserved by AI
+      sensitivity: 'unknown', // Not handled by AI enrichment as per new prompt
       tables: [],
     });
   });
@@ -120,8 +122,8 @@ function transformEnrichedDataToCatalog(
       const table: EnrichedTable = {
         id: `${et.Dataset_name}/${et.TABLE_NAME}`,
         name: et.TABLE_NAME,
-        source: et.SOURCE,
-        location: et.LOCATION,
+        source: et.source, // From input, preserved by AI
+        location: et.location, // From input, preserved by AI
         databaseName: et.DATABASE_NAME,
         schemaName: et.SCHEMA_NAME,
         owner: et.OWNER,
@@ -130,9 +132,9 @@ function transformEnrichedDataToCatalog(
         createdDate: et.CREATED_DATE,
         updatedDate: et.UPDATED_DATE,
         rowCount: et.Row_count ? parseInt(et.Row_count, 10) : undefined,
-        description: et.Description, // AI output is et.Description as per TableSchema
-        tags: et.Table_tags,        // AI output is et.Table_tags as per TableSchema
-        sensitivity: et.Sensitivity || 'unknown', // AI output is et.Sensitivity as per TableSchema
+        description: et.Description, // Enriched by AI
+        tags: et.Table_tags,        // Enriched by AI
+        sensitivity: et.Sensitivity || 'unknown', // From input, preserved by AI
         columns: [],
       };
       dataset.tables.push(table);
@@ -141,20 +143,25 @@ function transformEnrichedDataToCatalog(
 
   enrichedColumns.forEach(ec => {
     for (const dataset of datasetsMap.values()) {
-      const table = dataset.tables.find(t => t.name === ec.TABLE_NAME && dataset.name === (enrichedTables.find(et => et.TABLE_NAME === t.name)?.Dataset_name) );
-      if (table) {
-        const column: EnrichedColumn = {
-          id: `${dataset.name}/${table.name}/${ec.COLUMN_NAME}`,
-          name: ec.COLUMN_NAME,
-          dataType: ec.DATA_TYPE,
-          isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
-          isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
-          description: ec.description,    // AI output is ec.description as per ColumnSchema
-          tags: ec.Column_tags,          // AI output is ec.Column_tags as per ColumnSchema
-          sensitivity: ec.Sensitivity || 'unknown', // AI output is ec.Sensitivity as per ColumnSchema
-        };
-        table.columns.push(column);
-        break; 
+      // Find the parent dataset name for the current column's table
+      const parentDatasetName = enrichedTables.find(et => et.TABLE_NAME === ec.TABLE_NAME)?.Dataset_name;
+      if (dataset.name === parentDatasetName) {
+        const table = dataset.tables.find(t => t.name === ec.TABLE_NAME);
+        if (table) {
+          const column: EnrichedColumn = {
+            id: `${dataset.name}/${table.name}/${ec.COLUMN_NAME}`,
+            name: ec.COLUMN_NAME,
+            dataType: ec.DATA_TYPE,
+            isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
+            isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
+            description: ec.column_description,    // Enriched by AI
+            tags: ec.Column_tags,                 // Enriched by AI
+            sensitivity: ec.Sensitivity || 'unknown', // From input, preserved by AI
+            location: ec.location, // From input, preserved by AI
+          };
+          table.columns.push(column);
+          break; 
+        }
       }
     }
   });
@@ -178,9 +185,9 @@ export function getTableMetadata(datasetName: string, tableName: string): string
   if (!table) return undefined;
 
   // Construct a metadata string for the AI
-  let metadata = `Table: ${tableName}\nDescription: ${table.description || 'N/A'}\nSensitivity: ${table.sensitivity || 'N/A'}\nColumns:\n`;
+  let metadata = `Table: ${tableName}\nDescription: ${table.description || 'N/A'}\nSensitivity: ${table.sensitivity || 'N/A'}\nLocation: ${table.location || 'N/A'}\nColumns:\n`;
   table.columns.forEach(col => {
-    metadata += `  - ${col.name} (Type: ${col.dataType || 'N/A'}, PK: ${col.isPrimaryKey}, FK: ${col.isForeignKey}, Sensitivity: ${col.sensitivity || 'N/A'}, Description: ${col.description || 'N/A'})\n`;
+    metadata += `  - ${col.name} (Type: ${col.dataType || 'N/A'}, PK: ${col.isPrimaryKey}, FK: ${col.isForeignKey}, Sensitivity: ${col.sensitivity || 'N/A'}, Description: ${col.description || 'N/A'}, Location: ${col.location || 'N/A'})\n`;
   });
   return metadata;
 }
@@ -189,3 +196,4 @@ export function getTableMetadata(datasetName: string, tableName: string): string
 export function storeRawDataForEnrichment(data: EnrichMetadataInput) {
   rawDataForEnrichment = data;
 }
+

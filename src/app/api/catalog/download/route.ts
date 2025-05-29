@@ -1,3 +1,4 @@
+
 // src/app/api/catalog/download/route.ts
 import { NextResponse } from 'next/server';
 import { getCatalog } from '@/lib/catalog-store';
@@ -17,16 +18,18 @@ export async function GET() {
         Dataset_name: ds.name,
         Dataset_description: ds.description,
         Tags: ds.tags,
-        SOURCE: ds.source,
-        Sensitivity: ds.sensitivity,
+        source: ds.source, // Updated to lowercase 'source'
+        location: ds.location, // Added location
+        // Sensitivity for dataset is not explicitly stored/enriched in this model,
+        // but if it were, it would be: Sensitivity: ds.sensitivity,
       });
 
       ds.tables.forEach((tbl: EnrichedTable) => {
         rawTables.push({
           TABLE_NAME: tbl.name,
           Dataset_name: ds.name,
-          SOURCE: tbl.source,
-          LOCATION: tbl.location,
+          source: tbl.source, // Updated to lowercase 'source'
+          location: tbl.location, // Added location
           DATABASE_NAME: tbl.databaseName,
           SCHEMA_NAME: tbl.schemaName,
           OWNER: tbl.owner,
@@ -35,8 +38,8 @@ export async function GET() {
           CREATED_DATE: tbl.createdDate,
           UPDATED_DATE: tbl.updatedDate,
           Row_count: tbl.rowCount,
-          Description: tbl.description,
-          Table_tags: tbl.tags,
+          Description: tbl.description, // Standardized field name
+          Table_tags: tbl.tags, // Standardized field name
           Sensitivity: tbl.sensitivity,
         });
 
@@ -45,20 +48,21 @@ export async function GET() {
             TABLE_NAME: tbl.name,
             COLUMN_NAME: col.name,
             DATA_TYPE: col.dataType,
-            PRIMARY_KEY: col.isPrimaryKey,
-            FOREIGN_KEY: col.isForeignKey,
-            description: col.description,
-            Column_tags: col.tags,
+            PRIMARY_KEY: col.isPrimaryKey ? 'true' : 'false',
+            FOREIGN_KEY: col.isForeignKey ? 'true' : 'false',
+            column_description: col.description, // Updated to 'column_description'
+            Column_tags: col.tags, // Standardized field name
             Sensitivity: col.sensitivity,
+            location: col.location, // Added location
           });
         });
       });
     });
 
     const wb = XLSX.utils.book_new();
-    const wsDatasets = XLSX.utils.json_to_sheet(rawDatasets);
-    const wsTables = XLSX.utils.json_to_sheet(rawTables);
-    const wsColumns = XLSX.utils.json_to_sheet(rawColumns);
+    const wsDatasets = XLSX.utils.json_to_sheet(rawDatasets, {header: ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location']});
+    const wsTables = XLSX.utils.json_to_sheet(rawTables, {header: ['TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME', 'OWNER', 'PRIMARY_KEYS', 'FOREIGN_KEYS', 'CREATED_DATE', 'UPDATED_DATE', 'Row_count', 'Description', 'Table_tags', 'Sensitivity']});
+    const wsColumns = XLSX.utils.json_to_sheet(rawColumns, {header: ['TABLE_NAME', 'COLUMN_NAME', 'DATA_TYPE', 'PRIMARY_KEY', 'FOREIGN_KEY', 'column_description', 'Column_tags', 'Sensitivity', 'location']});
 
     XLSX.utils.book_append_sheet(wb, wsDatasets, 'datasets');
     XLSX.utils.book_append_sheet(wb, wsTables, 'tables');
@@ -79,3 +83,4 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to generate Excel file for download' }, { status: 500 });
   }
 }
+

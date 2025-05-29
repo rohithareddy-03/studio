@@ -1,3 +1,4 @@
+
 // src/components/admin/MetadataTreeView.tsx
 "use client";
 
@@ -5,7 +6,7 @@ import { useCatalog } from '@/contexts/CatalogProvider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Loader2, DatabaseZap, Table2, Columns, Tag, FileText, AlertTriangle, Info, CalendarDays, KeyRound, Rows } from 'lucide-react';
+import { Download, Loader2, DatabaseZap, Table2, Columns, Tag, FileText, AlertTriangle, Info, CalendarDays, KeyRound, Rows, MapPin } from 'lucide-react';
 import { SensitivityBadge } from './SensitivityBadge';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
 
@@ -53,10 +54,12 @@ export function MetadataTreeView() {
 
   const DetailItem = ({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | number | null }) => (
     value ? (
-      <div className="flex items-center text-sm text-muted-foreground space-x-2">
-        <Icon size={14} className="text-primary" />
-        <span className="font-medium">{label}:</span>
-        <span>{value}</span>
+      <div className="flex items-start text-sm text-muted-foreground space-x-2">
+        <Icon size={14} className="text-primary mt-0.5 shrink-0" />
+        <div>
+          <span className="font-medium">{label}:</span>
+          <span className="ml-1">{value}</span>
+        </div>
       </div>
     ) : null
   );
@@ -96,6 +99,7 @@ export function MetadataTreeView() {
                   <DetailItem icon={FileText} label="Description" value={dataset.description} />
                   <DetailItem icon={Tag} label="Tags" value={dataset.tags} />
                   <DetailItem icon={Info} label="Source" value={dataset.source} />
+                  <DetailItem icon={MapPin} label="Location" value={dataset.location} />
                 </div>
                 
                 {dataset.tables.length > 0 ? (
@@ -110,11 +114,11 @@ export function MetadataTreeView() {
                           </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-3 py-2 bg-background/20 rounded-b-md">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 pl-2 border-l-2 border-primary/30">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 mb-3 pl-2 border-l-2 border-primary/30">
                             <DetailItem icon={FileText} label="Description" value={table.description} />
                             <DetailItem icon={Tag} label="Tags" value={table.tags} />
                             <DetailItem icon={Info} label="Source" value={table.source} />
-                            <DetailItem icon={Info} label="Location" value={table.location} />
+                            <DetailItem icon={MapPin} label="Location" value={table.location} />
                             <DetailItem icon={Info} label="DB Name" value={table.databaseName} />
                             <DetailItem icon={Info} label="Schema" value={table.schemaName} />
                             <DetailItem icon={Info} label="Owner" value={table.owner} />
@@ -140,6 +144,7 @@ export function MetadataTreeView() {
                                       <div className="space-y-1 pl-1.5 border-l-2 border-primary/20">
                                         <DetailItem icon={FileText} label="Description" value={column.description} />
                                         <DetailItem icon={Tag} label="Tags" value={column.tags} />
+                                        <DetailItem icon={MapPin} label="Location" value={column.location} />
                                         {column.isPrimaryKey && <DetailItem icon={KeyRound} label="Primary Key" value="Yes" />}
                                         {column.isForeignKey && <DetailItem icon={KeyRound} label="Foreign Key" value="Yes" />}
                                       </div>
@@ -161,3 +166,4 @@ export function MetadataTreeView() {
     </Card>
   );
 }
+
