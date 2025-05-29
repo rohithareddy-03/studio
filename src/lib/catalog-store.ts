@@ -56,25 +56,34 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
             console.warn(`Skipping raw table with missing TABLE_NAME for dataset ${rd.Dataset_name}: ${JSON.stringify(rt)}`);
             return null;
         }
-        const tableColumns = rawColumns
+
+        const uniqueTableColumnsMap = new Map<string, EnrichedColumn>();
+        rawColumns
           .filter(rc => rc.TABLE_NAME === rt.TABLE_NAME)
-          .map(rc => {
+          .forEach(rc => {
             if (!rc.COLUMN_NAME) {
                 console.warn(`Skipping raw column with missing COLUMN_NAME for table ${rt.TABLE_NAME}: ${JSON.stringify(rc)}`);
-                return null;
+                return;
             }
-            return {
-              id: `${rd.Dataset_name}/${rt.TABLE_NAME}/${rc.COLUMN_NAME}`,
-              name: rc.COLUMN_NAME,
-              dataType: rc.DATA_TYPE,
-              isPrimaryKey: rc.PRIMARY_KEY === 'true' || rc.PRIMARY_KEY === true,
-              isForeignKey: rc.FOREIGN_KEY === 'true' || rc.FOREIGN_KEY === true,
-              description: rc.column_description,
-              tags: rc.Column_tags,
-              sensitivity: rc.Sensitivity || 'unknown',
-              location: rc.location,
-            };
-          }).filter((col): col is EnrichedColumn => col !== null);
+            const columnId = `${rd.Dataset_name}/${rt.TABLE_NAME}/${rc.COLUMN_NAME}`;
+            if (!uniqueTableColumnsMap.has(columnId)) { // Add only if ID is not already present
+                uniqueTableColumnsMap.set(columnId, {
+                  id: columnId,
+                  name: rc.COLUMN_NAME,
+                  dataType: rc.DATA_TYPE,
+                  isPrimaryKey: rc.PRIMARY_KEY === 'true' || rc.PRIMARY_KEY === true,
+                  isForeignKey: rc.FOREIGN_KEY === 'true' || rc.FOREIGN_KEY === true,
+                  description: rc.column_description,
+                  tags: rc.Column_tags,
+                  sensitivity: rc.Sensitivity || 'unknown',
+                  location: rc.location,
+                });
+            } else {
+                console.warn(`Duplicate raw column ID detected and skipped: ${columnId}`);
+            }
+          });
+        const tableColumns: EnrichedColumn[] = Array.from(uniqueTableColumnsMap.values());
+
         return {
           id: `${rd.Dataset_name}/${rt.TABLE_NAME}`,
           name: rt.TABLE_NAME,
@@ -117,13 +126,11 @@ function transformEnrichedDataToCatalog(
 ): CatalogData {
   const datasetsMap = new Map<string, EnrichedDataset>();
 
-  // Ensure inputs are arrays
   const validEnrichedDatasets = Array.isArray(enrichedDatasetsFromAI) ? enrichedDatasetsFromAI : [];
   const validEnrichedTables = Array.isArray(enrichedTablesFromAI) ? enrichedTablesFromAI : [];
   const validEnrichedColumns = Array.isArray(enrichedColumnsFromAI) ? enrichedColumnsFromAI : [];
 
 
-  // Stage 1: Populate datasetsMap with initial dataset structures from AI output
   validEnrichedDatasets.forEach(ed => {
     if (!ed || !ed.Dataset_name) {
       console.warn(`Skipping dataset from AI output due to missing data or Dataset_name: ${JSON.stringify(ed)}`);
@@ -136,12 +143,11 @@ function transformEnrichedDataToCatalog(
       tags: ed.Tags,
       source: ed.source,
       location: ed.location,
-      sensitivity: 'unknown', // Default, can be derived if needed
-      tables: [], // Initialize with empty tables array
+      sensitivity: 'unknown', 
+      tables: [], 
     });
   });
 
-  // Stage 2: Populate tables and their columns within the datasetsMap from AI output
   validEnrichedTables.forEach(et => {
     if (!et || !et.Dataset_name || !et.TABLE_NAME) {
       console.warn(`Skipping table from AI output due to missing data, Dataset_name, or TABLE_NAME: ${JSON.stringify(et)}`);
@@ -149,30 +155,36 @@ function transformEnrichedDataToCatalog(
     }
 
     const dataset = datasetsMap.get(et.Dataset_name);
-    if (dataset) { // Check if dataset was successfully added to map
-      const tableColumns: EnrichedColumn[] = validEnrichedColumns
-        .filter((ec): ec is RawColumn => ec !== null && ec !== undefined && ec.TABLE_NAME === et.TABLE_NAME) // Columns for the current table
-        .map(ec => {
+    if (dataset) {
+      const uniqueTableColumnsMap = new Map<string, EnrichedColumn>();
+      validEnrichedColumns
+        .filter((ec): ec is RawColumn => ec !== null && ec !== undefined && ec.TABLE_NAME === et.TABLE_NAME)
+        .forEach(ec => {
           if (!ec.COLUMN_NAME) {
             console.warn(`Skipping column from AI output with missing COLUMN_NAME for table ${et.TABLE_NAME}: ${JSON.stringify(ec)}`);
-            return null;
+            return;
           }
-          return {
-            id: `${dataset.name}/${et.TABLE_NAME}/${ec.COLUMN_NAME}`, // Use dataset.name for consistency
-            name: ec.COLUMN_NAME,
-            dataType: ec.DATA_TYPE,
-            isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
-            isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
-            description: ec.column_description,
-            tags: ec.Column_tags,
-            sensitivity: ec.Sensitivity || 'unknown',
-            location: ec.location,
-          };
-        })
-        .filter((col): col is EnrichedColumn => col !== null);
+          const columnId = `${dataset.name}/${et.TABLE_NAME}/${ec.COLUMN_NAME}`;
+          if (!uniqueTableColumnsMap.has(columnId)) { // Add only if ID is not already present
+            uniqueTableColumnsMap.set(columnId, {
+              id: columnId,
+              name: ec.COLUMN_NAME,
+              dataType: ec.DATA_TYPE,
+              isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
+              isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
+              description: ec.column_description,
+              tags: ec.Column_tags,
+              sensitivity: ec.Sensitivity || 'unknown',
+              location: ec.location,
+            });
+          } else {
+            console.warn(`Duplicate column ID detected and skipped during AI output transformation: ${columnId}`);
+          }
+        });
+      const tableColumns: EnrichedColumn[] = Array.from(uniqueTableColumnsMap.values());
 
       const table: EnrichedTable = {
-        id: `${dataset.name}/${et.TABLE_NAME}`, // Use dataset.name for consistency
+        id: `${dataset.name}/${et.TABLE_NAME}`,
         name: et.TABLE_NAME,
         source: et.source,
         location: et.location,
@@ -204,7 +216,7 @@ export function getCatalog(): CatalogData {
 }
 
 export function getDatasetByName(name: string): EnrichedDataset | undefined {
-  const currentCatalog = getCatalog(); // Use the function to get a fresh copy
+  const currentCatalog = getCatalog(); 
   return currentCatalog.datasets.find(d => d.name === name);
 }
 
@@ -214,7 +226,6 @@ export function getTableMetadata(datasetName: string, tableName: string): string
   const table = dataset.tables.find(t => t.name === tableName);
   if (!table) return undefined;
 
-  // Construct a metadata string for the AI
   let metadata = `Table: ${tableName}\nDescription: ${table.description || 'N/A'}\nSensitivity: ${table.sensitivity || 'N/A'}\nLocation: ${table.location || 'N/A'}\nColumns:\n`;
   table.columns.forEach(col => {
     metadata += `  - ${col.name} (Type: ${col.dataType || 'N/A'}, PK: ${col.isPrimaryKey}, FK: ${col.isForeignKey}, Sensitivity: ${col.sensitivity || 'N/A'}, Description: ${col.description || 'N/A'}, Location: ${col.location || 'N/A'})\n`;
@@ -222,13 +233,10 @@ export function getTableMetadata(datasetName: string, tableName: string): string
   return metadata;
 }
 
-// Used by /api/upload to store the initially parsed (but not yet AI enriched) data
 export function storeRawDataForEnrichment(data: EnrichMetadataInput) {
   rawDataForEnrichment = data;
 }
 
-// Helper function to also ensure the fallback `transformRawDataToCatalog` includes null checks for primary identifiers
-// This was partially done, but good to make consistent with the enriched version.
 function ensureRawDataTransformationIsRobust() {
     // The transformRawDataToCatalog was already updated to include these checks.
     // This function is a placeholder to note the review.
