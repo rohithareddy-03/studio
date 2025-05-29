@@ -1,13 +1,14 @@
 // src/contexts/CatalogProvider.tsx
 "use client";
 
-import type { CatalogData, EnrichedDataset, ChatMessage } from '@/types';
+import type { CatalogData, EnrichedDataset, EnrichedTable, ChatMessage } from '@/types';
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 
 interface CatalogContextType {
   catalog: CatalogData | null;
   selectedDataset: EnrichedDataset | null;
+  selectedTable: EnrichedTable | null;
   isLoading: boolean;
   error: string | null;
   chatMessages: ChatMessage[];
@@ -15,6 +16,7 @@ interface CatalogContextType {
   fetchCatalog: () => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
   selectDataset: (datasetName: string | null) => void;
+  selectTable: (tableId: string | null) => void;
   sendMessage: (message: string) => Promise<void>;
   reEnrich: () => Promise<void>;
 }
@@ -24,6 +26,7 @@ const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [selectedDataset, setSelectedDataset] = useState<EnrichedDataset | null>(null);
+  const [selectedTable, setSelectedTable] = useState<EnrichedTable | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -38,12 +41,19 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error('Failed to fetch catalog');
       const data: CatalogData = await response.json();
       setCatalog(data);
-      // If a dataset was previously selected, try to re-select it from the new catalog
+      
       if (selectedDataset && data.datasets) {
         const refreshedSelectedDataset = data.datasets.find(d => d.name === selectedDataset.name);
         setSelectedDataset(refreshedSelectedDataset || null);
+        if (refreshedSelectedDataset && selectedTable) {
+            const refreshedSelectedTable = refreshedSelectedDataset.tables.find(t => t.id === selectedTable.id);
+            setSelectedTable(refreshedSelectedTable || null);
+        } else if (!refreshedSelectedDataset) {
+            setSelectedTable(null);
+        }
       } else {
-        setSelectedDataset(null); // Clear selection if catalog is empty or previous selection not found
+        setSelectedDataset(null);
+        setSelectedTable(null);
       }
 
     } catch (err) {
@@ -52,7 +62,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, selectedDataset]);
+  }, [toast, selectedDataset, selectedTable]);
 
   useEffect(() => {
     fetchCatalog();
@@ -70,7 +80,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'File upload failed');
       }
-      await fetchCatalog(); // Refresh catalog after upload
+      await fetchCatalog(); 
       toast({ title: "Success", description: "File uploaded and metadata enriched." });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -89,7 +99,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Metadata re-enrichment failed');
       }
-      await fetchCatalog(); // Refresh catalog after re-enrichment
+      await fetchCatalog(); 
       toast({ title: "Success", description: "Metadata re-enriched successfully." });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -102,16 +112,26 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const selectDataset = (datasetName: string | null) => {
     if (!datasetName) {
       setSelectedDataset(null);
-      setChatMessages([]); // Clear chat when dataset is deselected
+      setSelectedTable(null);
+      setChatMessages([]); 
       return;
     }
     const ds = catalog?.datasets.find(d => d.name === datasetName) || null;
     setSelectedDataset(ds);
-    setChatMessages([]); // Clear chat when dataset changes
+    setSelectedTable(null); // Clear selected table when dataset changes
+    setChatMessages([]); 
     if (ds) {
-      // Add an initial AI message if a dataset is selected
        setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: ${ds.name}. How can I help you?`, timestamp: new Date() }]);
     }
+  };
+
+  const selectTable = (tableId: string | null) => {
+    if (!tableId || !selectedDataset) {
+        setSelectedTable(null);
+        return;
+    }
+    const table = selectedDataset.tables.find(t => t.id === tableId) || null;
+    setSelectedTable(table);
   };
 
   const sendMessage = async (message: string) => {
@@ -152,6 +172,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     <CatalogContext.Provider value={{
       catalog,
       selectedDataset,
+      selectedTable,
       isLoading,
       error,
       chatMessages,
@@ -159,6 +180,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       fetchCatalog,
       uploadFile,
       selectDataset,
+      selectTable,
       sendMessage,
       reEnrich
     }}>

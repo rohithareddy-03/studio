@@ -1,4 +1,3 @@
-
 // src/components/admin/MetadataTreeView.tsx
 "use client";
 
@@ -43,7 +42,7 @@ export function MetadataTreeView() {
 
   if (!catalog || catalog.datasets.length === 0) {
     return (
-      <Card className="mt-6 border-border bg-transparent"> {/* Updated card styling */}
+      <Card className="mt-6 bg-card"> {/* Updated card styling */}
         <CardHeader>
           <CardTitle>No Metadata Available</CardTitle>
           <CardDescription>Upload an Excel file to populate the catalog.</CardDescription>
@@ -54,10 +53,10 @@ export function MetadataTreeView() {
 
   const DetailItem = ({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | number | null }) => (
     value ? (
-      <div className="flex items-start text-sm text-muted-foreground space-x-2 py-0.5"> {/* Added small py for better spacing */}
+      <div className="flex items-start text-sm text-muted-foreground space-x-2 py-0.5"> 
         <Icon size={14} className="text-primary mt-0.5 shrink-0" />
         <div>
-          <span className="font-medium text-foreground/80">{label}:</span> {/* Slightly less prominent label color */}
+          <span className="font-medium text-foreground/80">{label}:</span> 
           <span className="ml-1">{value}</span>
         </div>
       </div>
@@ -66,10 +65,10 @@ export function MetadataTreeView() {
   
 
   return (
-    <Card className="mt-6 border-border"> {/* Removed shadow-lg */}
-      <CardHeader className="flex flex-row justify-between items-center border-b border-border pb-4"> {/* Added border-b */}
+    <Card className="mt-6 border-border"> 
+      <CardHeader className="flex flex-row justify-between items-center border-b border-border pb-4"> 
         <div>
-          <CardTitle className="text-2xl">Enriched Data Catalog</CardTitle>
+          <CardTitle className="text-2xl">Enriched Data Catalog (Tree View)</CardTitle>
           <CardDescription>Browse datasets, tables, and columns with their enriched metadata.</CardDescription>
         </div>
         <div className="space-x-2">
@@ -83,19 +82,19 @@ export function MetadataTreeView() {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-4 sm:p-6"> {/* Adjusted padding */}
+      <CardContent className="p-4 sm:p-6"> 
         <Accordion type="multiple" className="w-full">
           {catalog.datasets.map((dataset: EnrichedDataset) => (
-            <AccordionItem value={dataset.id} key={dataset.id} className="border-b border-border last:border-b-0"> {/* Ensure last item has no bottom border */}
-              <AccordionTrigger className="hover:bg-secondary/50 px-4 py-3 text-lg font-semibold rounded-t-md data-[state=closed]:rounded-b-md"> {/* Cleaner hover, rounded on close */}
+            <AccordionItem value={dataset.id} key={dataset.id} className="border-b border-border last:border-b-0"> 
+              <AccordionTrigger className="hover:bg-secondary/50 px-4 py-3 text-lg font-semibold rounded-t-md data-[state=closed]:rounded-b-md"> 
                 <div className="flex items-center gap-3">
                   <DatabaseZap size={20} className="text-primary" /> 
                   {dataset.name} 
                   <SensitivityBadge level={dataset.sensitivity} />
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="px-4 py-3 bg-secondary/30 rounded-b-md data-[state=closed]:border-none"> {/* Removed border on closed content for cleaner look */}
-                <div className="space-y-1.5 mb-4 pl-2 border-l-2 border-primary/30"> {/* Adjusted spacing */}
+              <AccordionContent className="px-4 py-3 bg-secondary/30 rounded-b-md data-[state=closed]:border-none"> 
+                <div className="space-y-1.5 mb-4 pl-2 border-l-2 border-primary/30"> 
                   <DetailItem icon={FileText} label="Description" value={dataset.description} />
                   <DetailItem icon={Tag} label="Tags" value={dataset.tags} />
                   <DetailItem icon={Info} label="Source" value={dataset.source} />
@@ -103,9 +102,9 @@ export function MetadataTreeView() {
                 </div>
                 
                 {dataset.tables.length > 0 ? (
-                  <Accordion type="multiple" className="w-full space-y-2"> {/* Added space-y for separation */}
+                  <Accordion type="multiple" className="w-full space-y-2"> 
                     {dataset.tables.map((table: EnrichedTable) => (
-                      <AccordionItem value={table.id} key={table.id} className="border border-border rounded-md bg-card"> {/* Removed shadow-sm, use bg-card */}
+                      <AccordionItem value={table.id} key={table.id} className="border border-border rounded-md bg-card"> 
                         <AccordionTrigger className="hover:bg-secondary/50 px-3 py-2 text-md font-medium rounded-t-md data-[state=closed]:rounded-b-md">
                            <div className="flex items-center gap-2">
                             <Table2 size={18} className="text-primary/80" />
@@ -114,7 +113,7 @@ export function MetadataTreeView() {
                           </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-3 py-2 bg-secondary/20 rounded-b-md data-[state=closed]:border-none">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1.5 mb-3 pl-2 border-l-2 border-primary/20"> {/* Adjusted spacing */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1.5 mb-3 pl-2 border-l-2 border-primary/20"> 
                             <DetailItem icon={FileText} label="Description" value={table.description} />
                             <DetailItem icon={Tag} label="Tags" value={table.tags} />
                             <DetailItem icon={Info} label="Source" value={table.source} />
@@ -130,9 +129,9 @@ export function MetadataTreeView() {
                           </div>
 
                           {table.columns.length > 0 ? (
-                             <Accordion type="multiple" className="w-full space-y-1"> {/* Added space-y */}
+                             <Accordion type="multiple" className="w-full space-y-1"> 
                                 {table.columns.map((column: EnrichedColumn) => (
-                                <AccordionItem value={column.id} key={column.id} className="border border-border/70 rounded-md bg-card/80"> {/* Removed shadow-xs */}
+                                <AccordionItem value={column.id} key={column.id} className="border border-border/70 rounded-md bg-card/80"> 
                                     <AccordionTrigger className="hover:bg-secondary/30 px-2 py-1.5 text-sm rounded-t-md data-[state=closed]:rounded-b-md">
                                     <div className="flex items-center gap-2">
                                         <Columns size={16} className="text-primary/70" />
@@ -141,7 +140,7 @@ export function MetadataTreeView() {
                                     </div>
                                     </AccordionTrigger>
                                     <AccordionContent className="px-2 py-1.5 text-xs bg-secondary/10 rounded-b-md data-[state=closed]:border-none">
-                                      <div className="space-y-0.5 pl-1.5 border-l-2 border-primary/10"> {/* Adjusted spacing */}
+                                      <div className="space-y-0.5 pl-1.5 border-l-2 border-primary/10"> 
                                         <DetailItem icon={FileText} label="Description" value={column.description} />
                                         <DetailItem icon={Tag} label="Tags" value={column.tags} />
                                         <DetailItem icon={MapPin} label="Location" value={column.location} />
