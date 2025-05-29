@@ -10,6 +10,7 @@ import { ArrowLeft, Loader2, AlertTriangle, Download, DatabaseZap } from 'lucide
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils'; // Added missing import
 
 export default function CatalogPage() {
   const { 
