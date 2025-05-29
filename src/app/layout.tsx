@@ -1,17 +1,17 @@
 
 import type {Metadata} from 'next';
-import { Geist, Geist_Mono } from 'next/font/google'; // Corrected import name
+import { Geist, Geist_Mono } from 'next/font/google'; 
 import './globals.css';
 import { CatalogProvider } from '@/contexts/CatalogProvider';
 import { Navbar } from '@/components/shared/Navbar';
-import { Toaster } from "@/components/ui/toaster"; // Corrected import path
+import { Toaster } from "@/components/ui/toaster"; 
 
-const geistSans = Geist({ // Corrected variable name
+const geistSans = Geist({ 
   variable: '--font-geist-sans',
   subsets: ['latin'],
 });
 
-const geistMono = Geist_Mono({ // Corrected variable name
+const geistMono = Geist_Mono({ 
   variable: '--font-geist-mono',
   subsets: ['latin'],
 });
@@ -28,10 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen bg-background`}>
         <CatalogProvider>
           <Navbar />
-          <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12"> {/* Increased padding for more white space */}
+          <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10"> {/* Adjusted padding slightly */}
             {children}
           </main>
           <Toaster />

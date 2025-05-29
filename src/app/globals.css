@@ -9,33 +9,34 @@ body {
 
 @layer base {
   :root {
+    /* Sleek, Modern, Futuristic, White-Space Heavy, Swiss Design Inspired Theme */
     --background: 0 0% 100%; /* Pure White */
-    --foreground: 220 10% 15%; /* Very Dark Desaturated Blue/Gray */
+    --foreground: 220 10% 15%; /* Very Dark Desaturated Blue/Gray for text */
 
-    --card: 0 0% 100%; /* Pure White */
+    --card: 0 0% 100%; /* White cards */
     --card-foreground: 220 10% 15%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 220 10% 15%;
 
-    --primary: 210 100% 56%; /* Bright, modern blue */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 210 100% 56%; /* A clear, modern blue for primary actions/selection */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
 
-    --secondary: 220 15% 96%; /* Very Light Gray/Blue tint */
-    --secondary-foreground: 220 10% 25%; /* Darker Gray/Blue */
+    --secondary: 220 20% 96%; /* Very light gray for subtle backgrounds, panel divisions */
+    --secondary-foreground: 220 10% 25%; /* Darker gray for text on secondary backgrounds */
 
-    --muted: 220 15% 92%; /* Light Gray/Blue tint */
+    --muted: 220 15% 92%; /* Light Gray/Blue tint for less important text or elements */
     --muted-foreground: 220 10% 45%; /* Medium Gray/Blue */
 
-    --accent: 210 100% 65%; /* Lighter variant of primary */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 200 80% 55%; /* A slightly softer, modern teal/blue accent */
+    --accent-foreground: 0 0% 100%; 
     
     --destructive: 0 84% 60%; /* Vibrant Red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 88%; /* Subtle Light Gray/Blue border */
-    --input: 220 15% 88%; /* Input border color */
-    --ring: 210 100% 65%; /* Ring color (accent) */
+    --border: 220 15% 90%; /* Very subtle light gray border */
+    --input: 220 15% 90%; /* Input border color */
+    --ring: 210 100% 65%; /* Ring color (primary variant) */
 
     --chart-1: 210 100% 50%;
     --chart-2: 170 80% 45%;
@@ -46,14 +47,14 @@ body {
     --radius: 0.3rem; /* Slightly sharper corners */
 
     /* Sidebar specific colors - aim for consistency or subtle differentiation */
-    --sidebar-background: 220 15% 98%; /* Very light, almost white */
+    --sidebar-background: 0 0% 98%; /* Almost white, slightly off-white for depth */
     --sidebar-foreground: 220 10% 15%;
     --sidebar-primary: 210 100% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 100% 65%;
+    --sidebar-accent: 200 80% 55%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 15% 85%;
-    --sidebar-ring: 210 100% 65%;
+    --sidebar-border: 220 15% 88%; /* Subtle border for sidebar elements */
+    --sidebar-ring: 200 80% 55%;
 
     /* Sensitivity colors - ensure good contrast and modern feel */
     --sensitivity-low: 120 60% 45%; /* Green */
@@ -63,32 +64,33 @@ body {
   }
 
   .dark {
+    /* Dark Theme Adaptation - Prioritize contrast and readability */
     --background: 220 20% 10%; /* Very Dark Blue/Gray */
     --foreground: 220 15% 90%; /* Light Gray/Blue text */
 
-    --card: 220 20% 12%;
+    --card: 220 20% 13%; /* Slightly lighter than background for card depth */
     --card-foreground: 220 15% 90%;
 
-    --popover: 220 20% 12%;
+    --popover: 220 20% 10%;
     --popover-foreground: 220 15% 90%;
 
-    --primary: 210 100% 60%; /* Slightly brighter blue for dark mode */
+    --primary: 210 100% 60%; /* Brighter blue for dark mode */
     --primary-foreground: 220 20% 10%; 
 
-    --secondary: 220 20% 18%; /* Darker secondary */
+    --secondary: 220 20% 18%; /* Darker secondary for panel divisions */
     --secondary-foreground: 220 15% 85%;
 
     --muted: 220 20% 15%;
     --muted-foreground: 220 15% 65%;
 
-    --accent: 210 100% 70%; 
+    --accent: 200 80% 60%; /* Brighter accent for dark mode */
     --accent-foreground: 220 20% 5%;
 
     --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 30%;
-    --input: 220 15% 30%; /* Input border for dark mode */
+    --border: 220 15% 25%; /* More visible border in dark mode */
+    --input: 220 15% 25%; 
     --ring: 210 100% 70%;
 
     --chart-1: 210 90% 60%;
@@ -101,10 +103,10 @@ body {
     --sidebar-foreground: 220 15% 88%;
     --sidebar-primary: 210 100% 60%;
     --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 210 100% 70%;
+    --sidebar-accent: 200 80% 60%;
     --sidebar-accent-foreground: 220 20% 5%;
-    --sidebar-border: 220 15% 25%;
-    --sidebar-ring: 210 100% 70%;
+    --sidebar-border: 220 15% 20%;
+    --sidebar-ring: 200 80% 60%;
 
     --sensitivity-low: 120 50% 55%;
     --sensitivity-medium: 40 80% 60%;
