@@ -102,7 +102,7 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
       tags: rd.Tags,
       source: rd.source,
       location: rd.location,
-      sensitivity: 'unknown',
+      sensitivity: 'unknown', // Default: derive from tables/columns if needed later
       tables: datasetTables,
     };
   }).filter((ds): ds is EnrichedDataset => ds !== null);
@@ -111,46 +111,45 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
 
 
 function transformEnrichedDataToCatalog(
-  enrichedDatasets: RawDataset[],
+  enrichedDatasets: RawDataset[], // AI might return data matching Raw* structure but with enriched fields
   enrichedTables: RawTable[],
   enrichedColumns: RawColumn[]
 ): CatalogData {
   const datasetsMap = new Map<string, EnrichedDataset>();
 
-  // Stage 1: Populate datasetsMap with initial dataset structures
+  // Stage 1: Populate datasetsMap with initial dataset structures from AI output
   enrichedDatasets.forEach(ed => {
     if (!ed.Dataset_name) {
       console.warn(`Skipping dataset from AI output with missing Dataset_name: ${JSON.stringify(ed)}`);
-      return; // Essential identifier missing
+      return;
     }
     datasetsMap.set(ed.Dataset_name, {
       id: ed.Dataset_name,
       name: ed.Dataset_name,
-      description: ed.Dataset_description,
-      tags: ed.Tags,
+      description: ed.Dataset_description, // Potentially enriched
+      tags: ed.Tags,                     // Potentially enriched
       source: ed.source,
       location: ed.location,
-      sensitivity: 'unknown', // Default or derive later if needed
-      tables: [], // Initialize tables array
+      sensitivity: 'unknown', // Default, can be derived if needed
+      tables: [],
     });
   });
 
-  // Stage 2: Populate tables and their columns within the datasetsMap
+  // Stage 2: Populate tables and their columns within the datasetsMap from AI output
   enrichedTables.forEach(et => {
     if (!et.Dataset_name || !et.TABLE_NAME) {
       console.warn(`Skipping table from AI output with missing Dataset_name or TABLE_NAME: ${JSON.stringify(et)}`);
-      return; // Essential identifiers missing
+      return;
     }
 
     const dataset = datasetsMap.get(et.Dataset_name);
     if (dataset) {
-      // Process columns for the current table
       const tableColumns: EnrichedColumn[] = enrichedColumns
-        .filter(ec => ec.TABLE_NAME === et.TABLE_NAME) // Filter columns belonging to the current table
+        .filter(ec => ec.TABLE_NAME === et.TABLE_NAME) // Columns for the current table
         .map(ec => {
           if (!ec.COLUMN_NAME) {
             console.warn(`Skipping column from AI output with missing COLUMN_NAME for table ${et.TABLE_NAME}: ${JSON.stringify(ec)}`);
-            return null; // Skip column if its name is missing
+            return null;
           }
           return {
             id: `${dataset.name}/${et.TABLE_NAME}/${ec.COLUMN_NAME}`,
@@ -158,13 +157,13 @@ function transformEnrichedDataToCatalog(
             dataType: ec.DATA_TYPE,
             isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
             isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
-            description: ec.column_description,
-            tags: ec.Column_tags,
+            description: ec.column_description, // Potentially enriched
+            tags: ec.Column_tags,              // Potentially enriched
             sensitivity: ec.Sensitivity || 'unknown',
             location: ec.location,
           };
         })
-        .filter((col): col is EnrichedColumn => col !== null); // Remove any nulls due to skipped columns
+        .filter((col): col is EnrichedColumn => col !== null);
 
       const table: EnrichedTable = {
         id: `${dataset.name}/${et.TABLE_NAME}`,
@@ -179,10 +178,10 @@ function transformEnrichedDataToCatalog(
         createdDate: et.CREATED_DATE,
         updatedDate: et.UPDATED_DATE,
         rowCount: et.Row_count ? parseInt(et.Row_count, 10) : undefined,
-        description: et.Description, // Enriched by AI
-        tags: et.Table_tags,        // Enriched by AI
+        description: et.Description, // Potentially enriched
+        tags: et.Table_tags,        // Potentially enriched
         sensitivity: et.Sensitivity || 'unknown',
-        columns: tableColumns, // Assign fully processed columns
+        columns: tableColumns,
       };
       dataset.tables.push(table);
     } else {
@@ -229,5 +228,3 @@ function ensureRawDataTransformationIsRobust() {
     // This function is a placeholder to note the review.
 }
 ensureRawDataTransformationIsRobust();
-
-```
