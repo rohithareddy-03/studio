@@ -3,7 +3,7 @@
 "use client";
 
 import Link from 'next/link';
-import { MessageSquareText, ShieldEllipsis, Settings } from 'lucide-react';
+import { MessageSquareText, ShieldEllipsis, Settings, Database } from 'lucide-react'; // Added Database icon
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ export function Navbar() {
 
   const navItems = [
     { href: '/', label: 'Chat', icon: MessageSquareText },
+    { href: '/catalog', label: 'Data Catalog', icon: Database }, // New Data Catalog item
     { href: '/admin', label: 'Admin', icon: Settings },
   ];
 
