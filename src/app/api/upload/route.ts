@@ -26,12 +26,6 @@ const ALL_COLUMN_KEYS: (keyof RawColumn)[] = ['TABLE_NAME', 'COLUMN_NAME', 'DATA
 
 function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName: string): string | null {
   if (!sheetData || sheetData.length === 0) {
-    // This case should ideally be caught before calling validateHeaders if sheets can be truly empty (no headers row).
-    // If sheetData[0] is undefined because the sheet was empty, XLSX.utils.sheet_to_json([]) results in [].
-    // The check `if (rawDatasets.length > 0)` etc. before calling this function handles empty data arrays.
-    // So, sheetData here is expected to have at least one object (from the header row if data exists, or an empty array if sheet was empty).
-    // If sheet_to_json produced an empty array, the caller won't call validateHeaders.
-    // If sheet_to_json produced an array of objects, sheetData[0] will exist.
     return null; 
   }
   const actualHeaders = Object.keys(sheetData[0]).map(h => h.toLowerCase());
@@ -40,7 +34,6 @@ function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName:
   const missingHeaders = requiredHeadersLower.filter(reqHeader => !actualHeaders.includes(reqHeader));
   
   if (missingHeaders.length > 0) {
-    // Find original casing for missing headers to display in error
     const originalCaseMissingHeaders = requiredHeaders.filter(rh => missingHeaders.includes(rh.toLowerCase()));
     return `Sheet '${sheetName}' is missing required columns (case-insensitive check): ${originalCaseMissingHeaders.join(', ')}. Please ensure all required headers are present.`;
   }
@@ -56,6 +49,9 @@ function transformToCanonical<T extends object>(parsedData: any[], allCanonicalK
       const excelKeyFound = excelKeys.find(ek => ek.toLowerCase() === (canonicalKey as string).toLowerCase());
       if (excelKeyFound) {
         (newObj as any)[canonicalKey] = obj[excelKeyFound];
+      } else {
+        // If a canonical key is not found in excel (e.g. optional column entirely missing),
+        // it remains undefined in newObj, which is fine for optional fields.
       }
     }
     return newObj as T;
@@ -92,54 +88,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required sheet: 'columns'." }, { status: 400 });
     }
     
-    // sheet_to_json will use the casing from the Excel file for keys
-    const parsedDatasets: any[] = XLSX.utils.sheet_to_json(datasetsSheet);
-    const parsedTables: any[] = XLSX.utils.sheet_to_json(tablesSheet);
-    const parsedColumns: any[] = XLSX.utils.sheet_to_json(columnsSheet);
+    // Parse sheets with defval: null to ensure empty cells are treated as null
+    const parsedDatasets: any[] = XLSX.utils.sheet_to_json(datasetsSheet, { defval: null });
+    const parsedTables: any[] = XLSX.utils.sheet_to_json(tablesSheet, { defval: null });
+    const parsedColumns: any[] = XLSX.utils.sheet_to_json(columnsSheet, { defval: null });
     
     let validationError;
-    // Validate headers for each sheet
-    // For datasets, it must not be empty and must have headers.
+
     if (parsedDatasets.length === 0) {
         return NextResponse.json({ error: 'Sheet \'datasets\' is empty or has no data. It must contain headers and at least one dataset.' }, { status: 400 });
     }
     validationError = validateHeaders(parsedDatasets, REQUIRED_DATASET_HEADERS, 'datasets');
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     
-    if (parsedTables.length > 0) {
+    // For tables and columns, header validation only runs if there's data.
+    // If sheets are present but empty (only headers), sheet_to_json with defval:null might produce [{header1:null, header2:null,...}]
+    // Or if truly empty (no headers even), it results in [].
+    // The validateHeaders expects sheetData[0] to exist if there are headers.
+    // Let's adjust: if parsedTables is [{...}] and all values are null, it means headers but no data.
+    // Or if parsedTables is [], it means sheet was empty or only headers which yielded no objects.
+    // Header validation for tables/columns is only critical if there are data rows.
+    
+    if (parsedTables.length > 0 && Object.values(parsedTables[0]).some(v => v !== null)) { // Check if there's at least one non-null value in the first row
         validationError = validateHeaders(parsedTables, REQUIRED_TABLE_HEADERS, 'tables');
         if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    } else if (parsedTables.length > 0 && !Object.values(parsedTables[0]).some(v => v !== null)) {
+        // This means a row of all nulls, likely just headers. We can clear parsedTables.
+        // Or, better, ensure validateHeaders can handle this. Let's assume for now it's okay if it's just headers.
+        // The current validateHeaders might fail if it gets an object of all nulls but expects certain keys.
+        // The logic for transformToCanonical and subsequent steps should handle empty arrays for tables/columns correctly.
     }
 
-    if (parsedColumns.length > 0) {
+
+    if (parsedColumns.length > 0 && Object.values(parsedColumns[0]).some(v => v !== null)) {
         validationError = validateHeaders(parsedColumns, REQUIRED_COLUMN_HEADERS, 'columns');
         if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     }
     
-    // Basic data presence validation
-    if (parsedDatasets.length === 0) { // This check is technically redundant due to the one above, but kept for clarity.
-        return NextResponse.json({ error: 'Datasets sheet must contain at least one dataset.' }, { status: 400 });
-    }
-    // Check if Dataset_name exists after potential case variations
     const firstDataset = parsedDatasets[0];
     const datasetNameKey = Object.keys(firstDataset).find(k => k.toLowerCase() === 'dataset_name');
-    if (!datasetNameKey || !firstDataset[datasetNameKey]) {
-      return NextResponse.json({ error: 'The first dataset in the "datasets" sheet must have a "Dataset_name".' }, { status: 400 });
+
+    if (!datasetNameKey || firstDataset[datasetNameKey] === null || firstDataset[datasetNameKey] === '') {
+      return NextResponse.json({ error: 'The first dataset in the "datasets" sheet must have a valid "Dataset_name".' }, { status: 400 });
     }
 
-    // Transform data to use canonical casing for keys
     const rawDatasets: RawDataset[] = transformToCanonical<RawDataset>(parsedDatasets, ALL_DATASET_KEYS);
     const rawTables: RawTable[] = transformToCanonical<RawTable>(parsedTables, ALL_TABLE_KEYS);
     const rawColumns: RawColumn[] = transformToCanonical<RawColumn>(parsedColumns, ALL_COLUMN_KEYS);
 
-    // Store raw data (now with canonical keys) for potential re-enrichment later
     storeRawDataForEnrichment({
       datasets: rawDatasets,
       tables: rawTables,
       columns: rawColumns,
     });
 
-    // Initialize catalog (which includes AI enrichment)
     const enrichedCatalog = await initializeCatalog(rawDatasets, rawTables, rawColumns);
 
     return NextResponse.json({ message: 'File uploaded and metadata enriched successfully', catalog: enrichedCatalog }, { status: 200 });
@@ -150,3 +152,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+

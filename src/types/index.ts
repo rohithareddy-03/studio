@@ -1,80 +1,83 @@
 
 export interface BaseMetadata {
-  description?: string;
-  tags?: string; // Comma-separated string or consider array if more complex ops needed
-  sensitivity?: 'low' | 'medium' | 'high' | 'unknown' | string; // Allow string for flexibility from AI
-  location?: string; // Added location here as it can apply to various levels
+  description?: string | null; // AI enriched fields use this
+  tags?: string | null; // AI enriched fields use this
+  sensitivity?: 'low' | 'medium' | 'high' | 'unknown' | string | null; 
+  location?: string | null; 
 }
 
+// Raw types match Excel structure + allow null from parsing empty cells
 export interface RawDataset {
-  Dataset_name: string; // Primary key for this dataset
-  Dataset_description?: string;
-  Tags?: string;
-  source?: string; 
-  location?: string;
+  /** Primary Key for this dataset. Used to link tables. */
+  Dataset_name: string; 
+  Dataset_description?: string | null;
+  Tags?: string | null;
+  source?: string | null; 
+  location?: string | null;
 }
 
 export interface RawTable {
-  TABLE_NAME: string; // Primary key for this table (within its dataset)
-  Dataset_name: string; // Foreign key linking to RawDataset.Dataset_name
-  source?: string; 
-  location?: string;
-  DATABASE_NAME?: string;
-  SCHEMA_NAME?: string;
-  OWNER?: string;
-  PRIMARY_KEYS?: string;
-  FOREIGN_KEYS?: string;
-  CREATED_DATE?: string;
-  UPDATED_DATE?: string;
-  Row_count?: string;
-  Description?: string;
-  Table_tags?: string;
-  Sensitivity?: string;
+  /** Primary Key for this table (unique within its dataset). Used to link columns. */
+  TABLE_NAME: string; 
+  /** Foreign Key: Links to RawDataset.Dataset_name */
+  Dataset_name: string; 
+  source?: string | null; 
+  location?: string | null;
+  DATABASE_NAME?: string | null;
+  SCHEMA_NAME?: string | null;
+  OWNER?: string | null;
+  PRIMARY_KEYS?: string | null;
+  FOREIGN_KEYS?: string | null;
+  CREATED_DATE?: string | null;
+  UPDATED_DATE?: string | null;
+  Row_count?: string | null; // Will be parsed to number later
+  Description?: string | null; // This is the field AI enriches for table description
+  Table_tags?: string | null; // This is the field AI enriches for table tags
+  Sensitivity?: string | null;
 }
 
 export interface RawColumn {
-  TABLE_NAME: string; // Foreign key linking to RawTable.TABLE_NAME
-  COLUMN_NAME: string; // Primary key for this column (within its table)
-  DATA_TYPE?: string;
-  PRIMARY_KEY?: 'true' | 'false' | boolean | string;
-  FOREIGN_KEY?: 'true' | 'false' | boolean | string;
-  column_description?: string; 
-  Column_tags?: string;
-  Sensitivity?: string;
-  location?: string; 
+  /** Foreign Key: Links to RawTable.TABLE_NAME */
+  TABLE_NAME: string; 
+  /** Primary Key for this column (unique within its table). */
+  COLUMN_NAME: string; 
+  DATA_TYPE?: string | null;
+  PRIMARY_KEY?: 'true' | 'false' | boolean | string | null;
+  FOREIGN_KEY?: 'true' | 'false' | boolean | string | null;
+  column_description?: string | null; // This is the field AI enriches for column description
+  Column_tags?: string | null; // This is the field AI enriches for column tags
+  Sensitivity?: string | null;
+  location?: string | null; 
 }
 
 // Enriched types - these are what we'll primarily use in the app
-export interface EnrichedColumn extends BaseMetadata {
+export interface EnrichedColumn extends BaseMetadata { // description, tags, sensitivity, location are from BaseMetadata
   id: string; // e.g., datasetName/tableName/columnName
   name: string;
-  dataType?: string;
+  dataType?: string | null;
   isPrimaryKey?: boolean;
   isForeignKey?: boolean;
-  // location is inherited from BaseMetadata
 }
 
-export interface EnrichedTable extends BaseMetadata {
+export interface EnrichedTable extends BaseMetadata { // description, tags, sensitivity, location are from BaseMetadata
   id: string; // e.g., datasetName/tableName
   name: string;
-  source?: string;
-  // location is inherited from BaseMetadata
-  databaseName?: string;
-  schemaName?: string;
-  owner?: string;
-  primaryKeys?: string; // Could be parsed into string[]
-  foreignKeys?: string; // Could be parsed into string[]
-  createdDate?: string;
-  updatedDate?: string;
-  rowCount?: number;
+  source?: string | null;
+  databaseName?: string | null;
+  schemaName?: string | null;
+  owner?: string | null;
+  primaryKeys?: string | null; 
+  foreignKeys?: string | null; 
+  createdDate?: string | null;
+  updatedDate?: string | null;
+  rowCount?: number; // Parsed from string
   columns: EnrichedColumn[];
 }
 
-export interface EnrichedDataset extends BaseMetadata {
+export interface EnrichedDataset extends BaseMetadata { // description, tags, sensitivity, location are from BaseMetadata
   id: string; // e.g., datasetName
   name: string;
-  source?: string;
-  // location is inherited from BaseMetadata
+  source?: string | null;
   tables: EnrichedTable[];
 }
 
@@ -88,3 +91,4 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
 }
+
