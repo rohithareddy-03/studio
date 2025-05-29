@@ -5,12 +5,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
-import { Database, Table2, Columns, Filter, Loader2, AlertTriangle, ChevronRight, X } from 'lucide-react';
+import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch } from 'lucide-react';
 import { SensitivityBadge } from '@/components/admin/SensitivityBadge';
 import { cn } from '@/lib/utils';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
@@ -42,11 +40,11 @@ const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: ()
         <Table2 size={16} className="text-primary" />
         {table.name}
       </CardTitle>
-      <CardDescription className="text-xs line-clamp-2">
+      <CardDescription className="text-xs line-clamp-2 mt-1">
         {table.description || "No description available."}
       </CardDescription>
     </CardHeader>
-    <CardContent className="p-4 pt-0 text-xs space-y-1 text-muted-foreground">
+    <CardContent className="p-4 pt-2 text-xs space-y-1.5 text-muted-foreground"> {/* Adjusted pt and space-y */}
         <div className="flex items-center gap-1.5">Rows: {table.rowCount ?? 'N/A'}</div>
         <div className="flex items-center gap-1.5">Sensitivity: <SensitivityBadge level={table.sensitivity} /></div>
     </CardContent>
@@ -60,15 +58,15 @@ const ColumnListItem = ({ column }: { column: EnrichedColumn }) => (
         <Columns size={14} className="text-primary/80" />
         {column.name}
       </CardTitle>
-      <CardDescription className="text-xs">
+      <CardDescription className="text-xs mt-0.5"> {/* Adjusted mt */}
         Data Type: {column.dataType || "N/A"}
       </CardDescription>
     </CardHeader>
-    <CardContent className="p-3 pt-0 text-xs space-y-1">
+    <CardContent className="p-3 pt-1.5 text-xs space-y-1"> {/* Adjusted pt */}
       {column.description && <p className="text-muted-foreground line-clamp-2">Desc: {column.description}</p>}
       <div className="flex items-center gap-1.5">Sensitivity: <SensitivityBadge level={column.sensitivity} /></div>
       {(column.isPrimaryKey || column.isForeignKey) && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 pt-0.5"> {/* Added pt */}
           {column.isPrimaryKey && <span className="text-accent font-medium">PK</span>}
           {column.isForeignKey && <span className="text-accent font-medium">FK</span>}
         </div>
@@ -115,11 +113,11 @@ export default function CatalogPage() {
 
   // Handle back navigation for breadcrumbs or clearing selections
   const clearTableSelection = () => selectTable(null);
-  const clearDatasetSelection = () => selectDataset(null); // This also clears table via context logic
+  const clearDatasetSelection = () => selectDataset(null); 
 
   if (isLoading && !catalog) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)]">
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)]"> {/* Adjusted height */}
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-xl text-muted-foreground">Loading Catalog...</p>
       </div>
@@ -128,7 +126,7 @@ export default function CatalogPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)] text-destructive">
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)] text-destructive"> {/* Adjusted height */}
         <AlertTriangle size={48} className="mb-4" />
         <p className="text-xl">Error loading catalog</p>
         <p className="text-sm">{error}</p>
@@ -140,15 +138,15 @@ export default function CatalogPage() {
     value ? (
       <div className="text-sm">
         <span className="font-medium text-foreground/80">{label}: </span>
-        <span className="text-muted-foreground">{value}</span>
+        <span className="text-muted-foreground">{String(value)}</span>
       </div>
     ) : null
-  );
+  )
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] border border-border bg-background rounded-lg overflow-hidden">
+    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden"> {/* Adjusted height */}
       {/* Left Panel: Dataset Explorer */}
-      <aside className="w-1/4 min-w-[280px] max-w-[320px] bg-secondary/50 border-r border-border flex flex-col">
+      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col"> {/* Increased max-w slightly */}
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 text-foreground">Datasets</h2>
           <Input
@@ -156,10 +154,10 @@ export default function CatalogPage() {
             placeholder="Filter datasets..."
             value={datasetFilter}
             onChange={(e) => setDatasetFilter(e.target.value)}
-            className="bg-background border-input focus:border-primary"
+            className="bg-background border-input focus:border-primary h-9" // Adjusted height
           />
         </div>
-        <ScrollArea className="flex-1 p-2">
+        <ScrollArea className="flex-1 p-2"> {/* Adjusted padding */}
           {filteredDatasets.length > 0 ? (
             <div className="space-y-1">
               {filteredDatasets.map(ds => (
@@ -181,7 +179,7 @@ export default function CatalogPage() {
       <main className="flex-1 flex flex-col overflow-y-auto">
         <div className="p-6 space-y-6">
           {/* Breadcrumbs */}
-          <Breadcrumb>
+          <Breadcrumb className="mb-4"> {/* Added mb */}
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink href="#" onClick={clearDatasetSelection} className={!selectedDataset ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}>
@@ -214,22 +212,23 @@ export default function CatalogPage() {
           </Breadcrumb>
 
           {!selectedDataset && (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-20rem)] text-muted-foreground">
-              <Database size={48} className="mb-4 opacity-50" />
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-18rem)] text-muted-foreground"> {/* Adjusted height */}
+              <PackageSearch size={56} className="mb-5 opacity-50" /> {/* Changed Icon */}
               <p className="text-xl">Select a dataset to view its details.</p>
+              <p className="text-sm mt-1">Explore your data catalog by choosing a dataset from the left panel.</p>
             </div>
           )}
 
           {/* Dataset Focus View */}
           {selectedDataset && !selectedTable && (
-            <div className="space-y-8">
+            <div className="space-y-6"> {/* Adjusted spacing */}
               <Card className="bg-card shadow-none border-border">
                 <CardHeader>
                   <CardTitle className="text-2xl font-bold text-primary">{selectedDataset.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-foreground/90">{selectedDataset.description || "No description available."}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 pt-2"> {/* Added pt */}
                     <DetailItem label="Tags" value={selectedDataset.tags} />
                     <DetailItem label="Source" value={selectedDataset.source} />
                     <DetailItem label="Location" value={selectedDataset.location} />
@@ -246,7 +245,7 @@ export default function CatalogPage() {
                     placeholder="Filter tables..."
                     value={tableFilter}
                     onChange={(e) => setTableFilter(e.target.value)}
-                    className="max-w-xs bg-background border-input focus:border-primary"
+                    className="max-w-xs bg-background border-input focus:border-primary h-9" // Adjusted height
                   />
                 </div>
                 {filteredTables.length > 0 ? (
@@ -256,7 +255,7 @@ export default function CatalogPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No tables found in this dataset or matching your filter.</p>
+                  <p className="text-muted-foreground text-center py-4">No tables found in this dataset or matching your filter.</p> {/* Added text-center and py */}
                 )}
               </section>
             </div>
@@ -264,14 +263,14 @@ export default function CatalogPage() {
 
           {/* Table Focus View */}
           {selectedDataset && selectedTable && (
-            <div className="space-y-8">
+            <div className="space-y-6"> {/* Adjusted spacing */}
               <Card className="bg-card shadow-none border-border">
                 <CardHeader>
                   <CardTitle className="text-2xl font-bold text-primary">{selectedTable.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-foreground/90">{selectedTable.description || "No description available."}</p>
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2">
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 pt-2"> {/* Added pt */}
                       <DetailItem label="Owner" value={selectedTable.owner} />
                       <DetailItem label="Source" value={selectedTable.source} />
                       <DetailItem label="Location" value={selectedTable.location} />
@@ -295,7 +294,7 @@ export default function CatalogPage() {
                     placeholder="Filter columns..."
                     value={columnFilter}
                     onChange={(e) => setColumnFilter(e.target.value)}
-                    className="max-w-xs bg-background border-input focus:border-primary"
+                    className="max-w-xs bg-background border-input focus:border-primary h-9" // Adjusted height
                   />
                 </div>
                 {filteredColumns.length > 0 ? (
@@ -305,7 +304,7 @@ export default function CatalogPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No columns found in this table or matching your filter.</p>
+                  <p className="text-muted-foreground text-center py-4">No columns found in this table or matching your filter.</p> {/* Added text-center and py */}
                 )}
               </section>
             </div>

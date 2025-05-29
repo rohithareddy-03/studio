@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 
 export function FileUpload() {
   const [file, setFile] = useState<File | null>(null);
-  const { uploadFile, isLoading, reEnrich } = useCatalog(); // Added reEnrich
+  const { uploadFile, isLoading, reEnrich } = useCatalog(); 
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -51,33 +51,33 @@ export function FileUpload() {
   };
 
   return (
-    <div className="space-y-6 p-6 border border-border rounded-lg bg-card">
+    <div className="space-y-8 p-6 md:p-8 border border-border rounded-lg bg-card"> {/* Increased padding */}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <Label htmlFor="file-upload-input-main" className="text-lg font-semibold">Upload Catalog File</Label>
-          <p className="text-sm text-muted-foreground mt-1">
+          <Label htmlFor="file-upload-input-main" className="text-xl font-semibold">Upload Catalog File</Label> {/* Increased size */}
+          <p className="text-sm text-muted-foreground mt-1.5"> {/* Increased mt */}
             Upload an .xlsx file with 'datasets', 'tables', and 'columns' sheets to enrich and update the catalog.
           </p>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2.5"> {/* Increased space-y */}
           <Label htmlFor="file-upload-input">Excel File (.xlsx)</Label>
           <Input
-            id="file-upload-input" // Kept original ID for reset logic
+            id="file-upload-input"
             type="file"
             accept=".xlsx"
             onChange={handleFileChange}
             className="file:text-primary file:font-semibold file:bg-primary/5 hover:file:bg-primary/10"
             disabled={isLoading}
           />
-          {file && <p className="text-sm text-muted-foreground">Selected file: {file.name}</p>}
+          {file && <p className="text-sm text-muted-foreground pt-1">Selected file: {file.name}</p>} {/* Added pt */}
         </div>
-        <Button type="submit" disabled={!file || isLoading} className="w-full">
-          {isLoading && !file ? ( // General loading state
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : isLoading && file ? ( // Loading specifically for upload
-             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Button type="submit" disabled={!file || isLoading} className="w-full h-11 text-base"> {/* Increased size */}
+          {isLoading && !file ? ( 
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> // Increased icon size
+          ) : isLoading && file ? ( 
+             <Loader2 className="mr-2 h-5 w-5 animate-spin" /> // Increased icon size
           ) : (
-            <UploadCloud className="mr-2 h-4 w-4" />
+            <UploadCloud className="mr-2 h-5 w-5" /> // Increased icon size
           )}
           Upload and Enrich
         </Button>
@@ -86,16 +86,16 @@ export function FileUpload() {
       <Separator />
 
       <div>
-        <h3 className="text-lg font-semibold mb-1">Catalog Actions</h3>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="text-xl font-semibold mb-1.5">Catalog Actions</h3> {/* Increased size and mb */}
+        <p className="text-sm text-muted-foreground mb-5"> {/* Increased mb */}
           Perform actions on the currently loaded catalog data.
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
-          <Button onClick={reEnrich} variant="outline" disabled={isLoading} className="flex-1">
+          <Button onClick={reEnrich} variant="outline" disabled={isLoading} className="flex-1 h-10"> {/* Adjusted size */}
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
             Re-enrich Current Catalog
           </Button>
-          <Button onClick={handleDownload} variant="outline" className="flex-1">
+          <Button onClick={handleDownload} variant="outline" className="flex-1 h-10"> {/* Adjusted size */}
             <Download className="mr-2 h-4 w-4" />
             Download Current Catalog
           </Button>
