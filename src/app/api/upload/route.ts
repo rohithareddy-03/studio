@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import { initializeCatalog, storeRawDataForEnrichment } from '@/lib/catalog-store';
 import type { RawDataset, RawTable, RawColumn } from '@/types';
 
-// Define required headers for each sheet
+// Define required headers for each sheet (Canonical Casing)
 const REQUIRED_DATASET_HEADERS = ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location'];
 const REQUIRED_TABLE_HEADERS = [
   'TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME', 
@@ -17,19 +17,49 @@ const REQUIRED_COLUMN_HEADERS = [
   'column_description', 'Column_tags', 'Sensitivity', 'location'
 ];
 
+// Helper to get all canonical keys for a type (approximated by combining required and known optional fields)
+// This is for the transformation step to ensure all relevant fields are considered.
+const ALL_DATASET_KEYS: (keyof RawDataset)[] = ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location'];
+const ALL_TABLE_KEYS: (keyof RawTable)[] = ['TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME', 'OWNER', 'PRIMARY_KEYS', 'FOREIGN_KEYS', 'CREATED_DATE', 'UPDATED_DATE', 'Row_count', 'Description', 'Table_tags', 'Sensitivity'];
+const ALL_COLUMN_KEYS: (keyof RawColumn)[] = ['TABLE_NAME', 'COLUMN_NAME', 'DATA_TYPE', 'PRIMARY_KEY', 'FOREIGN_KEY', 'column_description', 'Column_tags', 'Sensitivity', 'location'];
+
+
 function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName: string): string | null {
   if (!sheetData || sheetData.length === 0) {
-    // Allow empty sheets as per original behavior, but if not empty, headers are checked
-    // For stricter validation (sheet must exist and have headers even if no data rows):
-    // return `Sheet '${sheetName}' is empty or headers could not be read.`;
+    // This case should ideally be caught before calling validateHeaders if sheets can be truly empty (no headers row).
+    // If sheetData[0] is undefined because the sheet was empty, XLSX.utils.sheet_to_json([]) results in [].
+    // The check `if (rawDatasets.length > 0)` etc. before calling this function handles empty data arrays.
+    // So, sheetData here is expected to have at least one object (from the header row if data exists, or an empty array if sheet was empty).
+    // If sheet_to_json produced an empty array, the caller won't call validateHeaders.
+    // If sheet_to_json produced an array of objects, sheetData[0] will exist.
     return null; 
   }
-  const headers = Object.keys(sheetData[0]);
-  const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+  const actualHeaders = Object.keys(sheetData[0]).map(h => h.toLowerCase());
+  const requiredHeadersLower = requiredHeaders.map(h => h.toLowerCase());
+  
+  const missingHeaders = requiredHeadersLower.filter(reqHeader => !actualHeaders.includes(reqHeader));
+  
   if (missingHeaders.length > 0) {
-    return `Sheet '${sheetName}' is missing required columns: ${missingHeaders.join(', ')}.`;
+    // Find original casing for missing headers to display in error
+    const originalCaseMissingHeaders = requiredHeaders.filter(rh => missingHeaders.includes(rh.toLowerCase()));
+    return `Sheet '${sheetName}' is missing required columns (case-insensitive check): ${originalCaseMissingHeaders.join(', ')}. Please ensure all required headers are present.`;
   }
   return null;
+}
+
+function transformToCanonical<T extends object>(parsedData: any[], allCanonicalKeys: (keyof T)[]): T[] {
+  return parsedData.map(obj => {
+    const newObj: Partial<T> = {};
+    const excelKeys = Object.keys(obj);
+
+    for (const canonicalKey of allCanonicalKeys) {
+      const excelKeyFound = excelKeys.find(ek => ek.toLowerCase() === (canonicalKey as string).toLowerCase());
+      if (excelKeyFound) {
+        (newObj as any)[canonicalKey] = obj[excelKeyFound];
+      }
+    }
+    return newObj as T;
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -62,40 +92,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required sheet: 'columns'." }, { status: 400 });
     }
     
-    const rawDatasets: RawDataset[] = XLSX.utils.sheet_to_json(datasetsSheet);
-    const rawTables: RawTable[] = XLSX.utils.sheet_to_json(tablesSheet);
-    const rawColumns: RawColumn[] = XLSX.utils.sheet_to_json(columnsSheet);
+    // sheet_to_json will use the casing from the Excel file for keys
+    const parsedDatasets: any[] = XLSX.utils.sheet_to_json(datasetsSheet);
+    const parsedTables: any[] = XLSX.utils.sheet_to_json(tablesSheet);
+    const parsedColumns: any[] = XLSX.utils.sheet_to_json(columnsSheet);
     
+    let validationError;
     // Validate headers for each sheet
-    let validationError = validateHeaders(rawDatasets, REQUIRED_DATASET_HEADERS, 'datasets');
+    // For datasets, it must not be empty and must have headers.
+    if (parsedDatasets.length === 0) {
+        return NextResponse.json({ error: 'Sheet \'datasets\' is empty or has no data. It must contain headers and at least one dataset.' }, { status: 400 });
+    }
+    validationError = validateHeaders(parsedDatasets, REQUIRED_DATASET_HEADERS, 'datasets');
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     
-    // For tables and columns, check headers only if there's data (or enforce non-empty sheets if desired)
-    if (rawTables.length > 0) {
-        validationError = validateHeaders(rawTables, REQUIRED_TABLE_HEADERS, 'tables');
+    if (parsedTables.length > 0) {
+        validationError = validateHeaders(parsedTables, REQUIRED_TABLE_HEADERS, 'tables');
         if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
-    } else {
-        // If tables sheet is empty, it implies no tables, which is acceptable if datasets can exist without tables.
-        // If tables are mandatory for any dataset, further logic would be needed.
     }
 
-    if (rawColumns.length > 0) {
-        validationError = validateHeaders(rawColumns, REQUIRED_COLUMN_HEADERS, 'columns');
+    if (parsedColumns.length > 0) {
+        validationError = validateHeaders(parsedColumns, REQUIRED_COLUMN_HEADERS, 'columns');
         if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
-    } else {
-        // Similar to tables, columns sheet can be empty if tables can exist without detailed columns.
     }
     
-    // Basic data presence validation (at least one dataset must exist with a name)
-    if (rawDatasets.length === 0 || !rawDatasets[0]?.Dataset_name) {
-        return NextResponse.json({ error: 'Datasets sheet must contain at least one dataset with a "Dataset_name".' }, { status: 400 });
+    // Basic data presence validation
+    if (parsedDatasets.length === 0) { // This check is technically redundant due to the one above, but kept for clarity.
+        return NextResponse.json({ error: 'Datasets sheet must contain at least one dataset.' }, { status: 400 });
+    }
+    // Check if Dataset_name exists after potential case variations
+    const firstDataset = parsedDatasets[0];
+    const datasetNameKey = Object.keys(firstDataset).find(k => k.toLowerCase() === 'dataset_name');
+    if (!datasetNameKey || !firstDataset[datasetNameKey]) {
+      return NextResponse.json({ error: 'The first dataset in the "datasets" sheet must have a "Dataset_name".' }, { status: 400 });
     }
 
-    // Store raw data for potential re-enrichment later
+    // Transform data to use canonical casing for keys
+    const rawDatasets: RawDataset[] = transformToCanonical<RawDataset>(parsedDatasets, ALL_DATASET_KEYS);
+    const rawTables: RawTable[] = transformToCanonical<RawTable>(parsedTables, ALL_TABLE_KEYS);
+    const rawColumns: RawColumn[] = transformToCanonical<RawColumn>(parsedColumns, ALL_COLUMN_KEYS);
+
+    // Store raw data (now with canonical keys) for potential re-enrichment later
     storeRawDataForEnrichment({
-      datasets: rawDatasets.map(d => ({ ...d })),
-      tables: rawTables.map(t => ({ ...t })),
-      columns: rawColumns.map(c => ({ ...c })),
+      datasets: rawDatasets,
+      tables: rawTables,
+      columns: rawColumns,
     });
 
     // Initialize catalog (which includes AI enrichment)
@@ -109,4 +150,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-
