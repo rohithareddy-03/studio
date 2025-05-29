@@ -10,9 +10,9 @@ let rawDataForEnrichment: EnrichMetadataInput | null = null;
 
 export async function initializeCatalog(rawDatasets: RawDataset[], rawTables: RawTable[], rawColumns: RawColumn[]): Promise<CatalogData> {
   rawDataForEnrichment = {
-    datasets: rawDatasets.map(d => ({ ...d })), 
-    tables: rawTables.map(t => ({ ...t })),
-    columns: rawColumns.map(c => ({ ...c })),
+    datasets: rawDatasets.map(d => ({ ...d, Dataset_description: d.Dataset_description ?? null, Tags: d.Tags ?? null, source: d.source ?? null, location: d.location ?? null })),
+    tables: rawTables.map(t => ({ ...t, source: t.source ?? null, location: t.location ?? null, DATABASE_NAME: t.DATABASE_NAME ?? null, SCHEMA_NAME: t.SCHEMA_NAME ?? null, OWNER: t.OWNER ?? null, PRIMARY_KEYS: t.PRIMARY_KEYS ?? null, FOREIGN_KEYS: t.FOREIGN_KEYS ?? null, CREATED_DATE: t.CREATED_DATE ?? null, UPDATED_DATE: t.UPDATED_DATE ?? null, Row_count: t.Row_count ?? null, Description: t.Description ?? null, Table_tags: t.Table_tags ?? null, Sensitivity: t.Sensitivity ?? null })),
+    columns: rawColumns.map(c => ({ ...c, DATA_TYPE: c.DATA_TYPE ?? null, PRIMARY_KEY: c.PRIMARY_KEY ?? null, FOREIGN_KEY: c.FOREIGN_KEY ?? null, column_description: c.column_description ?? null, Column_tags: c.Column_tags ?? null, Sensitivity: c.Sensitivity ?? null, location: c.location ?? null })),
   };
 
   try {
@@ -111,54 +111,60 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
 
 
 function transformEnrichedDataToCatalog(
-  enrichedDatasets: RawDataset[], // AI might return data matching Raw* structure but with enriched fields
-  enrichedTables: RawTable[],
-  enrichedColumns: RawColumn[]
+  enrichedDatasetsFromAI: (RawDataset | null | undefined)[],
+  enrichedTablesFromAI: (RawTable | null | undefined)[],
+  enrichedColumnsFromAI: (RawColumn | null | undefined)[]
 ): CatalogData {
   const datasetsMap = new Map<string, EnrichedDataset>();
 
+  // Ensure inputs are arrays
+  const validEnrichedDatasets = Array.isArray(enrichedDatasetsFromAI) ? enrichedDatasetsFromAI : [];
+  const validEnrichedTables = Array.isArray(enrichedTablesFromAI) ? enrichedTablesFromAI : [];
+  const validEnrichedColumns = Array.isArray(enrichedColumnsFromAI) ? enrichedColumnsFromAI : [];
+
+
   // Stage 1: Populate datasetsMap with initial dataset structures from AI output
-  enrichedDatasets.forEach(ed => {
-    if (!ed.Dataset_name) {
-      console.warn(`Skipping dataset from AI output with missing Dataset_name: ${JSON.stringify(ed)}`);
+  validEnrichedDatasets.forEach(ed => {
+    if (!ed || !ed.Dataset_name) {
+      console.warn(`Skipping dataset from AI output due to missing data or Dataset_name: ${JSON.stringify(ed)}`);
       return;
     }
     datasetsMap.set(ed.Dataset_name, {
       id: ed.Dataset_name,
       name: ed.Dataset_name,
-      description: ed.Dataset_description, // Potentially enriched
-      tags: ed.Tags,                     // Potentially enriched
+      description: ed.Dataset_description,
+      tags: ed.Tags,
       source: ed.source,
       location: ed.location,
       sensitivity: 'unknown', // Default, can be derived if needed
-      tables: [],
+      tables: [], // Initialize with empty tables array
     });
   });
 
   // Stage 2: Populate tables and their columns within the datasetsMap from AI output
-  enrichedTables.forEach(et => {
-    if (!et.Dataset_name || !et.TABLE_NAME) {
-      console.warn(`Skipping table from AI output with missing Dataset_name or TABLE_NAME: ${JSON.stringify(et)}`);
+  validEnrichedTables.forEach(et => {
+    if (!et || !et.Dataset_name || !et.TABLE_NAME) {
+      console.warn(`Skipping table from AI output due to missing data, Dataset_name, or TABLE_NAME: ${JSON.stringify(et)}`);
       return;
     }
 
     const dataset = datasetsMap.get(et.Dataset_name);
-    if (dataset) {
-      const tableColumns: EnrichedColumn[] = enrichedColumns
-        .filter(ec => ec.TABLE_NAME === et.TABLE_NAME) // Columns for the current table
+    if (dataset) { // Check if dataset was successfully added to map
+      const tableColumns: EnrichedColumn[] = validEnrichedColumns
+        .filter((ec): ec is RawColumn => ec !== null && ec !== undefined && ec.TABLE_NAME === et.TABLE_NAME) // Columns for the current table
         .map(ec => {
           if (!ec.COLUMN_NAME) {
             console.warn(`Skipping column from AI output with missing COLUMN_NAME for table ${et.TABLE_NAME}: ${JSON.stringify(ec)}`);
             return null;
           }
           return {
-            id: `${dataset.name}/${et.TABLE_NAME}/${ec.COLUMN_NAME}`,
+            id: `${dataset.name}/${et.TABLE_NAME}/${ec.COLUMN_NAME}`, // Use dataset.name for consistency
             name: ec.COLUMN_NAME,
             dataType: ec.DATA_TYPE,
             isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
             isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
-            description: ec.column_description, // Potentially enriched
-            tags: ec.Column_tags,              // Potentially enriched
+            description: ec.column_description,
+            tags: ec.Column_tags,
             sensitivity: ec.Sensitivity || 'unknown',
             location: ec.location,
           };
@@ -166,7 +172,7 @@ function transformEnrichedDataToCatalog(
         .filter((col): col is EnrichedColumn => col !== null);
 
       const table: EnrichedTable = {
-        id: `${dataset.name}/${et.TABLE_NAME}`,
+        id: `${dataset.name}/${et.TABLE_NAME}`, // Use dataset.name for consistency
         name: et.TABLE_NAME,
         source: et.source,
         location: et.location,
@@ -178,14 +184,14 @@ function transformEnrichedDataToCatalog(
         createdDate: et.CREATED_DATE,
         updatedDate: et.UPDATED_DATE,
         rowCount: et.Row_count ? parseInt(et.Row_count, 10) : undefined,
-        description: et.Description, // Potentially enriched
-        tags: et.Table_tags,        // Potentially enriched
+        description: et.Description,
+        tags: et.Table_tags,
         sensitivity: et.Sensitivity || 'unknown',
         columns: tableColumns,
       };
       dataset.tables.push(table);
     } else {
-      console.warn(`Table ${et.TABLE_NAME} from AI output refers to a non-existent dataset ${et.Dataset_name}. Skipping table.`);
+      console.warn(`Table ${et.TABLE_NAME} from AI output refers to a non-existent or invalid dataset ${et.Dataset_name}. Skipping table.`);
     }
   });
   
