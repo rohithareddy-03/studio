@@ -1,3 +1,4 @@
+
 // src/lib/catalog-store.ts
 import type { CatalogData, EnrichedDataset, EnrichedTable, EnrichedColumn, RawDataset, RawTable, RawColumn } from '@/types';
 import { enrichMetadata as enrichMetadataAI, type EnrichMetadataInput } from '@/ai/flows/enrich-metadata-on-upload';
@@ -9,7 +10,7 @@ let rawDataForEnrichment: EnrichMetadataInput | null = null;
 
 export async function initializeCatalog(rawDatasets: RawDataset[], rawTables: RawTable[], rawColumns: RawColumn[]): Promise<CatalogData> {
   rawDataForEnrichment = {
-    datasets: rawDatasets.map(d => ({ ...d })), // AI schema might differ slightly, ensure all fields
+    datasets: rawDatasets.map(d => ({ ...d })), 
     tables: rawTables.map(t => ({ ...t })),
     columns: rawColumns.map(c => ({ ...c })),
   };
@@ -21,8 +22,7 @@ export async function initializeCatalog(rawDatasets: RawDataset[], rawTables: Ra
     return catalog;
   } catch (error) {
     console.error("Error enriching metadata:", error);
-    // Fallback: use raw data if enrichment fails? Or throw error?
-    // For now, let's build a basic catalog from raw data if enrichment fails
+    // Fallback: use raw data if enrichment fails
     catalog = transformRawDataToCatalog(rawDatasets, rawTables, rawColumns);
     return catalog;
   }
@@ -57,8 +57,8 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
             dataType: rc.DATA_TYPE,
             isPrimaryKey: rc.PRIMARY_KEY === 'true' || rc.PRIMARY_KEY === true,
             isForeignKey: rc.FOREIGN_KEY === 'true' || rc.FOREIGN_KEY === true,
-            description: rc.description,
-            tags: rc.Column_tags || rc.tags,
+            description: rc.description, // Uses RawColumn.description
+            tags: rc.Column_tags,      // Uses RawColumn.Column_tags
             sensitivity: rc.Sensitivity || 'unknown',
           }));
         return {
@@ -74,8 +74,8 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
           createdDate: rt.CREATED_DATE,
           updatedDate: rt.UPDATED_DATE,
           rowCount: rt.Row_count ? parseInt(rt.Row_count, 10) : undefined,
-          description: rt.Description || rt.description,
-          tags: rt.Table_tags || rt.tags,
+          description: rt.Description, // Uses RawTable.Description
+          tags: rt.Table_tags,        // Uses RawTable.Table_tags
           sensitivity: rt.Sensitivity || 'unknown',
           columns: tableColumns,
         };
@@ -109,8 +109,7 @@ function transformEnrichedDataToCatalog(
       description: ed.Dataset_description,
       tags: ed.Tags,
       source: ed.SOURCE,
-      // Assuming AI might add sensitivity to datasets, otherwise default
-      sensitivity: (ed as any).Sensitivity || 'unknown', 
+      sensitivity: 'unknown', // AI Schema for Dataset does not include Sensitivity
       tables: [],
     });
   });
@@ -131,9 +130,9 @@ function transformEnrichedDataToCatalog(
         createdDate: et.CREATED_DATE,
         updatedDate: et.UPDATED_DATE,
         rowCount: et.Row_count ? parseInt(et.Row_count, 10) : undefined,
-        description: et.Description || et.description, // Prefer Description if both exist
-        tags: et.Table_tags || et.tags,
-        sensitivity: et.Sensitivity || 'unknown',
+        description: et.Description, // AI output is et.Description as per TableSchema
+        tags: et.Table_tags,        // AI output is et.Table_tags as per TableSchema
+        sensitivity: et.Sensitivity || 'unknown', // AI output is et.Sensitivity as per TableSchema
         columns: [],
       };
       dataset.tables.push(table);
@@ -141,9 +140,6 @@ function transformEnrichedDataToCatalog(
   });
 
   enrichedColumns.forEach(ec => {
-    // Find the table this column belongs to
-    // This requires iterating through datasets and their tables.
-    // A more efficient way would be to create a tablesMap earlier.
     for (const dataset of datasetsMap.values()) {
       const table = dataset.tables.find(t => t.name === ec.TABLE_NAME && dataset.name === (enrichedTables.find(et => et.TABLE_NAME === t.name)?.Dataset_name) );
       if (table) {
@@ -153,9 +149,9 @@ function transformEnrichedDataToCatalog(
           dataType: ec.DATA_TYPE,
           isPrimaryKey: ec.PRIMARY_KEY === 'true' || ec.PRIMARY_KEY === true,
           isForeignKey: ec.FOREIGN_KEY === 'true' || ec.FOREIGN_KEY === true,
-          description: ec.description,
-          tags: ec.Column_tags || ec.tags,
-          sensitivity: ec.Sensitivity || 'unknown',
+          description: ec.description,    // AI output is ec.description as per ColumnSchema
+          tags: ec.Column_tags,          // AI output is ec.Column_tags as per ColumnSchema
+          sensitivity: ec.Sensitivity || 'unknown', // AI output is ec.Sensitivity as per ColumnSchema
         };
         table.columns.push(column);
         break; 

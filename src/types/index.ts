@@ -1,3 +1,4 @@
+
 export interface BaseMetadata {
   description?: string;
   tags?: string; // Comma-separated string or consider array if more complex ops needed
@@ -11,7 +12,7 @@ export interface RawDataset {
   SOURCE?: string;
 }
 
-export interface RawTable extends BaseMetadata {
+export interface RawTable {
   TABLE_NAME: string;
   Dataset_name: string;
   SOURCE?: string;
@@ -24,20 +25,20 @@ export interface RawTable extends BaseMetadata {
   CREATED_DATE?: string;
   UPDATED_DATE?: string;
   Row_count?: string;
-  Description?: string; // This field seems redundant with BaseMetadata.description, use one
-  Table_tags?: string; // This field seems redundant with BaseMetadata.tags, use one
-  // Sensitivity is in BaseMetadata
+  Description?: string; // User-specified: Uppercase D for table description
+  Table_tags?: string;  // User-specified: Table_tags for table tags
+  Sensitivity?: string; // User-specified: Sensitivity for table
 }
 
-export interface RawColumn extends BaseMetadata {
+export interface RawColumn {
   TABLE_NAME: string;
   COLUMN_NAME: string;
   DATA_TYPE?: string;
   PRIMARY_KEY?: 'true' | 'false' | boolean | string;
   FOREIGN_KEY?: 'true' | 'false' | boolean | string;
-  // description is in BaseMetadata
-  Column_tags?: string; // This field seems redundant with BaseMetadata.tags, use one
-  // Sensitivity is in BaseMetadata
+  description?: string;  // User-specified: lowercase d for column description
+  Column_tags?: string; // User-specified: Column_tags for column tags
+  Sensitivity?: string; // User-specified: Sensitivity for column
 }
 
 // Enriched types - these are what we'll primarily use in the app
