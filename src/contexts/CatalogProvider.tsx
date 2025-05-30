@@ -4,6 +4,8 @@
 
 import type { CatalogData, EnrichedDataset, EnrichedTable, ChatMessage as AppChatMessage } from '@/types';
 import type { ChatMessageHistory } from '@/ai/flows/chat-integration-with-gemini';
+import type { ExtractKeysFromSqlOutput } from '@/ai/flows/extract-keys-from-sql-flow';
+
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,6 +26,7 @@ interface CatalogContextType {
   updateMetadataField: (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => Promise<void>;
   enrichDataset: (datasetName: string) => Promise<void>;
   enrichTable: (datasetName: string, tableName: string) => Promise<void>;
+  enrichKeysWithSql: (sqlQuery: string, datasetName: string, tableName?: string) => Promise<{ success: boolean; message: string; summary?: string; warnings?: string[]; primaryKeysFound?: any[]; foreignKeysFound?: any[] }>;
 }
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
@@ -33,7 +36,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [selectedDataset, setSelectedDataset] = useState<EnrichedDataset | null>(null);
   const [selectedTable, setSelectedTable] = useState<EnrichedTable | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false); // Used for dataset/table enrichment & SQL key enrichment
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AppChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -156,7 +159,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.error || `Failed to enrich dataset ${datasetName}`);
       }
       const data = await response.json();
-      setCatalog(data.catalog); // Update catalog with enriched data
+      setCatalog(data.catalog); 
       toast({ title: "Dataset Enriched", description: data.message });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -181,7 +184,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.error || `Failed to enrich table ${tableName}`);
       }
       const data = await response.json();
-      setCatalog(data.catalog); // Update catalog with enriched data
+      setCatalog(data.catalog); 
       toast({ title: "Table Enriched", description: data.message });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -191,6 +194,44 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setIsEnriching(false);
     }
   };
+
+  const enrichKeysWithSql = async (sqlQuery: string, datasetName: string, tableName?: string) => {
+    setIsEnriching(true); // Reuse isEnriching for loading state
+    setError(null);
+    try {
+      const response = await fetch('/api/catalog/enrich-keys-sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sqlQuery, datasetName, tableName }),
+      });
+      const data = await response.json(); // Always parse JSON, even for errors
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to enrich keys for ${tableName || datasetName}`);
+      }
+      setCatalog(data.catalog); // Update catalog with new key info
+      toast({ 
+        title: "Keys Enriched via SQL", 
+        description: data.summary || data.message,
+        duration: 7000,
+      });
+      return { 
+        success: true, 
+        message: data.message, 
+        summary: data.summary, 
+        warnings: data.warnings,
+        primaryKeysFound: data.primaryKeysFound,
+        foreignKeysFound: data.foreignKeysFound,
+      };
+    } catch (err) {
+      const newError = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(newError);
+      toast({ title: "SQL Key Enrichment Error", description: newError, variant: "destructive" });
+      return { success: false, message: newError };
+    } finally {
+      setIsEnriching(false);
+    }
+  };
+
 
   const sendMessage = async (message: string) => {
     if (!selectedDataset) {
@@ -282,7 +323,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     <CatalogContext.Provider value={{
       catalog, selectedDataset, selectedTable, isLoading, isEnriching, error,
       chatMessages, isChatLoading, fetchCatalog, uploadFile, selectDataset,
-      selectTable, sendMessage, updateMetadataField, enrichDataset, enrichTable
+      selectTable, sendMessage, updateMetadataField, enrichDataset, enrichTable,
+      enrichKeysWithSql
     }}>
       {children}
     </CatalogContext.Provider>

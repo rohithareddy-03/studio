@@ -2,19 +2,29 @@
 // src/app/catalog/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
-import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search, Pencil, Save, XCircle, Sparkles } from 'lucide-react';
+import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search, Pencil, Save, XCircle, Sparkles, BrainCircuit, DatabaseZap } from 'lucide-react';
 import { SensitivityBadge } from '@/components/admin/SensitivityBadge';
 import { cn } from '@/lib/utils';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 
 const DetailItem = ({ icon: Icon, label, value, className }: { icon?: React.ElementType, label: string, value?: string | number | null, className?: string }) => {
@@ -75,21 +85,83 @@ const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: ()
   </Card>
 );
 
+const SqlEnrichmentModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  isLoading,
+  contextName, // Dataset or Table name
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (sqlQuery: string) => Promise<void>;
+  isLoading: boolean;
+  contextName: string;
+}) => {
+  const [sqlQuery, setSqlQuery] = useState('');
+
+  const handleSubmit = async () => {
+    if (!sqlQuery.trim()) {
+      // Basic validation
+      alert('Please enter a SQL query.');
+      return;
+    }
+    await onSubmit(sqlQuery);
+    // Optionally clear query or close modal based on onSubmit's success/failure
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[600px] bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            <DatabaseZap size={22} /> Enrich Keys via SQL for '{contextName}'
+          </DialogTitle>
+          <DialogDescription className="text-foreground/80">
+            Enter a SQL query (e.g., CREATE TABLE, ALTER TABLE, or a query with JOINs) to help DataSage identify primary and foreign keys. The AI will analyze the query text, not execute it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <Textarea
+            placeholder="Enter your SQL query here..."
+            value={sqlQuery}
+            onChange={(e) => setSqlQuery(e.target.value)}
+            rows={10}
+            className="bg-background border-input focus:border-primary text-sm"
+            disabled={isLoading}
+          />
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          </DialogClose>
+          <Button onClick={handleSubmit} disabled={isLoading || !sqlQuery.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit size={16} className="mr-2"/>}
+            Submit Query for Analysis
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 
 export default function CatalogPage() {
   const {
     catalog,
     selectedDataset,
     selectedTable,
-    isLoading,
+    isLoading: isCatalogLoading, // Renamed to avoid conflict
     isEnriching,
     error,
-    selectDataset: selectDatasetContext, // Renamed to avoid conflict with local selectDataset
+    selectDataset: selectDatasetContext,
     selectTable,
     updateMetadataField,
     enrichDataset,
     enrichTable,
+    enrichKeysWithSql,
   } = useCatalog();
+  const { toast } = useToast();
 
   const [datasetFilter, setDatasetFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
@@ -98,6 +170,10 @@ export default function CatalogPage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingFieldKey, setEditingFieldKey] = useState<'description' | 'tags' | null>(null);
   const [currentEditValue, setCurrentEditValue] = useState('');
+
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [sqlModalContext, setSqlModalContext] = useState<{ type: 'dataset' | 'table'; name: string; datasetName: string; tableName?: string } | null>(null);
+
 
   const handleEditClick = (itemId: string, fieldKey: 'description' | 'tags', currentValue: string | null | undefined) => {
     setEditingItemId(itemId);
@@ -119,6 +195,41 @@ export default function CatalogPage() {
     setEditingFieldKey(null);
     setCurrentEditValue('');
   };
+  
+  const handleOpenSqlModal = (type: 'dataset' | 'table', name: string, datasetName: string, tableName?: string) => {
+    setSqlModalContext({ type, name, datasetName, tableName });
+    setIsSqlModalOpen(true);
+  };
+
+  const handleSqlSubmit = async (sqlQuery: string) => {
+    if (!sqlModalContext) return;
+    const { datasetName, tableName } = sqlModalContext;
+    const result = await enrichKeysWithSql(sqlQuery, datasetName, tableName);
+    if (result.success) {
+      toast({
+        title: "SQL Key Enrichment Successful",
+        description: (
+          <div>
+            <p>{result.summary}</p>
+            { (result.primaryKeysFound && result.primaryKeysFound.length > 0) && <p className="mt-2">Primary Keys: {result.primaryKeysFound.map(k => `${k.tableName}.${k.columnName}`).join(', ')}</p> }
+            { (result.foreignKeysFound && result.foreignKeysFound.length > 0) && <p className="mt-1">Foreign Keys: {result.foreignKeysFound.map(k => `${k.tableName}.${k.columnName}`).join(', ')}</p> }
+            { (result.warnings && result.warnings.length > 0) && <p className="mt-2 text-orange-500">Warnings: {result.warnings.join('; ')}</p> }
+          </div>
+        ),
+        duration: 10000,
+      });
+      setIsSqlModalOpen(false);
+      setSqlQuery(''); // Clear query from modal state if modal keeps it
+    } else {
+      toast({
+        title: "SQL Key Enrichment Failed",
+        description: result.message,
+        variant: "destructive",
+      });
+    }
+  };
+  const [sqlQuery, setSqlQuery] = useState(''); // Added to satisfy SQL Modal, though modal might have its own state
+
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -207,7 +318,7 @@ export default function CatalogPage() {
             </div>
           </div>
         ) : (
-          <p className={cn("text-foreground/90 break-words leading-snug", Icon ? "ml-0" : "")}> {/* Removed indent based on new DetailItem */}
+          <p className={cn("text-foreground/90 break-words leading-snug", Icon ? "ml-0" : "")}>
             {currentValue || <span className="italic text-muted-foreground">Not set</span>}
           </p>
         )}
@@ -216,7 +327,7 @@ export default function CatalogPage() {
   };
 
 
-  if (isLoading && !catalog) {
+  if (isCatalogLoading && !catalog) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
@@ -237,9 +348,8 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden"> {/* Adjusted height */}
-      {/* Left Panel: Dataset Explorer */}
-      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col"> {/* Increased max-w slightly */}
+    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden">
+      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 text-primary flex items-center gap-2"><Database size={20}/> Datasets</h2>
           <div className="relative">
@@ -269,10 +379,9 @@ export default function CatalogPage() {
         </ScrollArea>
       </aside>
 
-      {/* Main Content Panel: Workspace */}
       <ScrollArea className="flex-1">
         <main className="flex-1 flex flex-col bg-background p-0">
-          <div className="p-5 space-y-5"> {/* Overall padding for workspace content */}
+          <div className="p-5 space-y-5">
             <Breadcrumb className="mb-2">
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -313,7 +422,6 @@ export default function CatalogPage() {
               </div>
             )}
 
-            {/* Dataset Focus View */}
             {selectedDataset && !selectedTable && (
               <div className="space-y-5 animate-fadeIn">
                 <Card className="bg-card shadow-sm border">
@@ -322,16 +430,28 @@ export default function CatalogPage() {
                       <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
                         <Database size={24}/>{selectedDataset.name}
                       </CardTitle>
-                      <Button 
-                        onClick={() => enrichDataset(selectedDataset.name)} 
-                        variant="outline" 
-                        size="sm"
-                        disabled={isEnriching}
-                        className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
-                      >
-                        {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
-                        Enrich Dataset
-                      </Button>
+                      <div className="flex gap-2">
+                         <Button 
+                          onClick={() => enrichDataset(selectedDataset.name)} 
+                          variant="outline" 
+                          size="sm"
+                          disabled={isEnriching}
+                          className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
+                        >
+                          {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
+                          Enrich Details
+                        </Button>
+                        <Button 
+                          onClick={() => handleOpenSqlModal('dataset', selectedDataset.name, selectedDataset.name)} 
+                          variant="outline" 
+                          size="sm"
+                          disabled={isEnriching}
+                          className="text-accent border-accent/50 hover:bg-accent/10 hover:text-accent"
+                        >
+                          {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <DatabaseZap size={16} className="mr-2"/>}
+                           Enrich Keys (SQL)
+                        </Button>
+                      </div>
                     </div>
                      <SensitivityBadge level={selectedDataset.sensitivity} />
                   </CardHeader>
@@ -372,7 +492,6 @@ export default function CatalogPage() {
               </div>
             )}
 
-            {/* Table Focus View */}
             {selectedDataset && selectedTable && (
               <div className="space-y-5 animate-fadeIn">
                 <Card className="bg-card shadow-sm border">
@@ -381,16 +500,28 @@ export default function CatalogPage() {
                       <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
                         <Table2 size={24}/>{selectedTable.name}
                       </CardTitle>
-                       <Button 
-                        onClick={() => enrichTable(selectedDataset.name, selectedTable.name)} 
-                        variant="outline" 
-                        size="sm"
-                        disabled={isEnriching}
-                        className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
-                      >
-                        {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
-                        Enrich Table
-                      </Button>
+                       <div className="flex gap-2">
+                          <Button 
+                            onClick={() => enrichTable(selectedDataset.name, selectedTable.name)} 
+                            variant="outline" 
+                            size="sm"
+                            disabled={isEnriching}
+                            className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
+                          >
+                            {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
+                            Enrich Details
+                          </Button>
+                           <Button 
+                            onClick={() => handleOpenSqlModal('table', selectedTable.name, selectedDataset.name, selectedTable.name)}
+                            variant="outline" 
+                            size="sm"
+                            disabled={isEnriching}
+                            className="text-accent border-accent/50 hover:bg-accent/10 hover:text-accent"
+                          >
+                            {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <DatabaseZap size={16} className="mr-2"/>}
+                             Enrich Keys (SQL)
+                          </Button>
+                       </div>
                     </div>
                     <SensitivityBadge level={selectedTable.sensitivity} />
                   </CardHeader>
@@ -464,6 +595,15 @@ export default function CatalogPage() {
           </div>
         </main>
       </ScrollArea>
+      {isSqlModalOpen && sqlModalContext && (
+        <SqlEnrichmentModal
+          isOpen={isSqlModalOpen}
+          onClose={() => setIsSqlModalOpen(false)}
+          onSubmit={handleSqlSubmit}
+          isLoading={isEnriching}
+          contextName={sqlModalContext.name}
+        />
+      )}
     </div>
   );
 }
