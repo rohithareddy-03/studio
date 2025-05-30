@@ -40,13 +40,13 @@ export type ExtractKeysFromSqlOutput = z.infer<typeof ExtractKeysFromSqlOutputSc
 
 
 export async function extractKeysFromSql(input: ExtractKeysFromSqlInput): Promise<ExtractKeysFromSqlOutput> {
-  console.log('[extractKeysFromSqlFlow] Input received:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
+  console.log('[extractKeysFromSql wrapper] Input received:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
   try {
     const result = await extractKeysFlow(input);
-    console.log('[extractKeysFromSqlFlow] AI Output:', JSON.stringify(result, null, 2).substring(0, 500) + "...");
+    console.log('[extractKeysFromSql wrapper] Flow Output (result):', JSON.stringify(result, null, 2).substring(0, 800) + "...");
     return result;
   } catch (error) {
-    console.error('[extractKeysFromSqlFlow] Error during flow execution:', error);
+    console.error('[extractKeysFromSql wrapper] Error during flow execution:', error);
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during SQL key extraction.";
     // Return a structured error within the expected output schema
     return {
@@ -109,8 +109,12 @@ const extractKeysFlow = ai.defineFlow(
     outputSchema: ExtractKeysFromSqlOutputSchema,
   },
   async (input) => {
+    console.log('[extractKeysFlow] Input to AI prompt:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
     const { output } = await prompt(input);
+    console.log('[extractKeysFlow] Raw output from AI prompt:', JSON.stringify(output, null, 2).substring(0, 800) + "...");
+
     if (!output) {
+      console.warn('[extractKeysFlow] AI analysis returned no output object.');
       return {
         primaryKeys: [],
         foreignKeys: [],
@@ -122,7 +126,7 @@ const extractKeysFlow = ai.defineFlow(
     return {
         primaryKeys: output.primaryKeys || [],
         foreignKeys: output.foreignKeys || [],
-        analysisSummary: output.analysisSummary,
+        analysisSummary: output.analysisSummary || "AI provided no analysis summary.",
         warnings: output.warnings || [],
     };
   }

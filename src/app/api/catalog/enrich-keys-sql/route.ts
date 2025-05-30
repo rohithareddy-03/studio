@@ -10,6 +10,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sqlQuery, datasetName, tableName } = body;
 
+    console.log('[Enrich Keys SQL API] Request body:', JSON.stringify(body, null, 2).substring(0, 500) + "...");
+
+
     if (!sqlQuery || typeof sqlQuery !== 'string') {
       return NextResponse.json({ error: 'sqlQuery is required and must be a string' }, { status: 400 });
     }
@@ -41,10 +44,13 @@ export async function POST(request: NextRequest) {
 
 
     const aiInput = { sqlQuery, datasetName, tableName, existingSchemaContext };
+    console.log('[Enrich Keys SQL API] Input to extractKeysFromSql flow:', JSON.stringify(aiInput, null, 2).substring(0, 500) + "...");
     const aiKeyAnalysis: ExtractKeysFromSqlOutput = await extractKeysFromSql(aiInput);
+    console.log('[Enrich Keys SQL API] Output from extractKeysFromSql flow (aiKeyAnalysis):', JSON.stringify(aiKeyAnalysis, null, 2).substring(0, 800) + "...");
+
 
     if (aiKeyAnalysis.warnings && aiKeyAnalysis.warnings.some(w => w.startsWith("Extraction failed:") || w.startsWith("AI returned no output.") || w.startsWith("AI analysis returned no output."))) {
-      console.error('AI Key Extraction failed:', aiKeyAnalysis.analysisSummary, aiKeyAnalysis.warnings);
+      console.error('[Enrich Keys SQL API] AI Key Extraction failed:', aiKeyAnalysis.analysisSummary, aiKeyAnalysis.warnings);
       return NextResponse.json({ 
         error: `AI key extraction failed: ${aiKeyAnalysis.analysisSummary}`,
         summary: aiKeyAnalysis.analysisSummary, 
@@ -56,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (success) {
       const updatedCatalog = getCatalog(); // Fetch the entire catalog to send back
+      console.log('[Enrich Keys SQL API] Successfully updated keys. Returning updated catalog.');
       return NextResponse.json({ 
         message: 'Keys enriched successfully from SQL query.', 
         summary: aiKeyAnalysis.analysisSummary,
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('[Enrich Keys SQL API] Error:', error);
+    console.error('[Enrich Keys SQL API] Error in POST handler:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return NextResponse.json({ error: `Failed to enrich keys from SQL: ${errorMessage}` }, { status: 500 });
   }
