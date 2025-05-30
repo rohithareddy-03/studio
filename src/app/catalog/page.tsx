@@ -9,16 +9,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
-import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search, Pencil, Save, XCircle } from 'lucide-react';
+import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search, Pencil, Save, XCircle, Sparkles } from 'lucide-react';
 import { SensitivityBadge } from '@/components/admin/SensitivityBadge';
 import { cn } from '@/lib/utils';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
 
-// --- Re-styled Item Components ---
+const DetailItem = ({ icon: Icon, label, value, className }: { icon?: React.ElementType, label: string, value?: string | number | null, className?: string }) => {
+  if (!(value || (typeof value === 'number' && value === 0))) {
+    return null;
+  }
+  return (
+    <div className={cn("text-sm py-1", className)}>
+      <p className="font-semibold text-foreground/70 leading-tight flex items-center gap-1.5">
+         {Icon && <Icon size={15} className="text-primary/90 shrink-0" />}
+         {label}
+      </p>
+      <p className="text-foreground/90 break-words leading-snug mt-0.5 ml-1">
+        {String(value)}
+      </p>
+    </div>
+  );
+};
+
 
 const DatasetListItem = ({ dataset, onSelect, isSelected }: { dataset: EnrichedDataset, onSelect: () => void, isSelected: boolean }) => (
   <button
@@ -60,51 +75,6 @@ const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: ()
   </Card>
 );
 
-const ColumnListItem = ({ column }: { column: EnrichedColumn }) => (
-  <Card className="bg-card border">
-    <CardHeader className="p-3">
-      <div className="flex items-center justify-between">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground/90">
-          <Columns size={16} className="text-primary/90" />
-          {column.name}
-        </CardTitle>
-        <SensitivityBadge level={column.sensitivity} />
-      </div>
-      <CardDescription className="text-xs mt-1 text-foreground/70">
-        Data Type: <span className="font-medium text-foreground/80">{column.dataType || "N/A"}</span>
-      </CardDescription>
-    </CardHeader>
-    <CardContent className="p-3 pt-1.5 text-xs space-y-1 text-muted-foreground">
-      {column.description && <p className="text-foreground/70 line-clamp-2 h-8">Desc: {column.description}</p>}
-      {column.tags && <p className="text-foreground/70 line-clamp-1">Tags: {column.tags}</p>}
-      {(column.isPrimaryKey || column.isForeignKey) && (
-        <div className="flex gap-2 pt-1">
-          {column.isPrimaryKey && <Badge variant="outline" className="border-accent text-accent text-[0.7rem] px-1.5 py-0.5">Primary Key</Badge>}
-          {column.isForeignKey && <Badge variant="outline" className="border-accent/70 text-accent/70 text-[0.7rem] px-1.5 py-0.5">Foreign Key</Badge>}
-        </div>
-      )}
-    </CardContent>
-  </Card>
-);
-
-const DetailItem = ({ icon: Icon, label, value, className }: { icon?: React.ElementType, label: string, value?: string | number | null, className?: string }) => {
-  if (!(value || (typeof value === 'number' && value === 0))) {
-    return null;
-  }
-
-  return (
-    <div className={cn("text-sm", className)}>
-      <p className="font-medium text-foreground/70 leading-tight flex items-center gap-1.5">
-         {Icon && <Icon size={15} className="text-primary/90 shrink-0" />}
-         {label}
-      </p>
-      <p className="text-foreground/90 break-words leading-snug mt-0.5 ml-[calc(15px+0.375rem)]"> {/* Indent value if icon exists */}
-        {String(value)}
-      </p>
-    </div>
-  );
-};
-
 
 export default function CatalogPage() {
   const {
@@ -112,17 +82,19 @@ export default function CatalogPage() {
     selectedDataset,
     selectedTable,
     isLoading,
+    isEnriching,
     error,
-    selectDataset,
+    selectDataset: selectDatasetContext, // Renamed to avoid conflict with local selectDataset
     selectTable,
     updateMetadataField,
+    enrichDataset,
+    enrichTable,
   } = useCatalog();
 
   const [datasetFilter, setDatasetFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
   const [columnFilter, setColumnFilter] = useState('');
 
-  // Editing State
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingFieldKey, setEditingFieldKey] = useState<'description' | 'tags' | null>(null);
   const [currentEditValue, setCurrentEditValue] = useState('');
@@ -154,10 +126,10 @@ export default function CatalogPage() {
     if (datasetNameFromQuery && catalog?.datasets && !selectedDataset) {
         const dsToSelect = catalog.datasets.find(d => d.name === datasetNameFromQuery);
         if (dsToSelect) {
-            selectDataset(dsToSelect.name);
+            selectDatasetContext(dsToSelect.name);
         }
     }
-  }, [catalog, selectDataset, selectedDataset]);
+  }, [catalog, selectDatasetContext, selectedDataset]);
 
 
   const filteredDatasets = useMemo(() => {
@@ -180,7 +152,7 @@ export default function CatalogPage() {
 
   const clearTableSelection = () => selectTable(null);
   const clearDatasetSelection = () => {
-    selectDataset(null);
+    selectDatasetContext(null);
     const url = new URL(window.location.href);
     url.searchParams.delete('dataset');
     window.history.pushState({}, '', url.toString());
@@ -199,7 +171,7 @@ export default function CatalogPage() {
 
     return (
       <div className="text-sm space-y-1 py-1.5 group">
-        <div className="font-medium text-foreground/70 leading-tight flex items-center gap-1.5">
+        <div className="font-semibold text-foreground/70 leading-tight flex items-center gap-1.5">
           {Icon && <Icon size={15} className="text-primary/90 shrink-0" />}
           {label}
           {!isEditing && (
@@ -235,7 +207,7 @@ export default function CatalogPage() {
             </div>
           </div>
         ) : (
-          <p className={cn("text-foreground/90 break-words leading-snug", Icon ? "ml-[calc(15px+0.375rem)]" : "")}>
+          <p className={cn("text-foreground/90 break-words leading-snug", Icon ? "ml-0" : "")}> {/* Removed indent based on new DetailItem */}
             {currentValue || <span className="italic text-muted-foreground">Not set</span>}
           </p>
         )}
@@ -265,9 +237,9 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden">
+    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden"> {/* Adjusted height */}
       {/* Left Panel: Dataset Explorer */}
-      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col">
+      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col"> {/* Increased max-w slightly */}
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 text-primary flex items-center gap-2"><Database size={20}/> Datasets</h2>
           <div className="relative">
@@ -287,7 +259,7 @@ export default function CatalogPage() {
               <DatasetListItem
                 key={ds.id}
                 dataset={ds}
-                onSelect={() => selectDataset(ds.name)}
+                onSelect={() => selectDatasetContext(ds.name)}
                 isSelected={selectedDataset?.id === ds.id}
               />
             ))
@@ -300,7 +272,7 @@ export default function CatalogPage() {
       {/* Main Content Panel: Workspace */}
       <ScrollArea className="flex-1">
         <main className="flex-1 flex flex-col bg-background p-0">
-          <div className="p-5 space-y-5">
+          <div className="p-5 space-y-5"> {/* Overall padding for workspace content */}
             <Breadcrumb className="mb-2">
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -350,11 +322,21 @@ export default function CatalogPage() {
                       <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
                         <Database size={24}/>{selectedDataset.name}
                       </CardTitle>
-                      <SensitivityBadge level={selectedDataset.sensitivity} />
+                      <Button 
+                        onClick={() => enrichDataset(selectedDataset.name)} 
+                        variant="outline" 
+                        size="sm"
+                        disabled={isEnriching}
+                        className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
+                      >
+                        {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
+                        Enrich Dataset
+                      </Button>
                     </div>
+                     <SensitivityBadge level={selectedDataset.sensitivity} />
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {renderEditableField(selectedDataset.id, 'description', selectedDataset.description, "Description", true)}
+                    {renderEditableField(selectedDataset.id, 'description', selectedDataset.description, "Description", true, FileText)}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 pt-3 border-t border-border/70 mt-3">
                       {renderEditableField(selectedDataset.id, 'tags', selectedDataset.tags, "Tags", false, Tag)}
                       <DetailItem icon={Info} label="Source" value={selectedDataset.source} />
@@ -399,11 +381,21 @@ export default function CatalogPage() {
                       <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
                         <Table2 size={24}/>{selectedTable.name}
                       </CardTitle>
-                      <SensitivityBadge level={selectedTable.sensitivity} />
+                       <Button 
+                        onClick={() => enrichTable(selectedDataset.name, selectedTable.name)} 
+                        variant="outline" 
+                        size="sm"
+                        disabled={isEnriching}
+                        className="text-primary border-primary/50 hover:bg-primary/10 hover:text-primary"
+                      >
+                        {isEnriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles size={16} className="mr-2"/>}
+                        Enrich Table
+                      </Button>
                     </div>
+                    <SensitivityBadge level={selectedTable.sensitivity} />
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {renderEditableField(selectedTable.id, 'description', selectedTable.description, "Description", true)}
+                    {renderEditableField(selectedTable.id, 'description', selectedTable.description, "Description", true, FileText)}
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 pt-3.5 border-t border-border/70 mt-3.5">
                         {renderEditableField(selectedTable.id, 'tags', selectedTable.tags, "Tags", false, Tag)}
                         <DetailItem icon={Info} label="Owner" value={selectedTable.owner} />
@@ -437,8 +429,6 @@ export default function CatalogPage() {
                   {filteredColumns.length > 0 ? (
                     <div className="space-y-2.5">
                       {filteredColumns.map(col => (
-                        // ColumnListItem is display-only for now, but could be enhanced for editing.
-                        // For this iteration, editing column descriptions/tags will be part of its detailed card.
                         <Card key={col.id} className="bg-card border">
                           <CardHeader className="p-3 pb-2">
                             <div className="flex items-center justify-between">
@@ -453,7 +443,7 @@ export default function CatalogPage() {
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="p-3 pt-1 text-xs space-y-1.5 text-muted-foreground">
-                             {renderEditableField(col.id, 'description', col.description, "Description", true)}
+                             {renderEditableField(col.id, 'description', col.description, "Description", true, FileText)}
                              {renderEditableField(col.id, 'tags', col.tags, "Tags", false, Tag)}
                             {(col.isPrimaryKey || col.isForeignKey) && (
                               <div className="flex gap-2 pt-1">

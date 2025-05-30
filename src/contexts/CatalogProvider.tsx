@@ -2,8 +2,8 @@
 // src/contexts/CatalogProvider.tsx
 "use client";
 
-import type { CatalogData, EnrichedDataset, EnrichedTable, EnrichedColumn, ChatMessage as AppChatMessage } from '@/types';
-import type { ChatMessageHistory } from '@/ai/flows/chat-integration-with-gemini'; // Import AI flow's history type
+import type { CatalogData, EnrichedDataset, EnrichedTable, ChatMessage as AppChatMessage } from '@/types';
+import type { ChatMessageHistory } from '@/ai/flows/chat-integration-with-gemini';
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,7 +11,8 @@ interface CatalogContextType {
   catalog: CatalogData | null;
   selectedDataset: EnrichedDataset | null;
   selectedTable: EnrichedTable | null;
-  isLoading: boolean;
+  isLoading: boolean; // General loading for catalog fetch/upload
+  isEnriching: boolean; // Specific loading for enrichment actions
   error: string | null;
   chatMessages: AppChatMessage[];
   isChatLoading: boolean;
@@ -20,8 +21,9 @@ interface CatalogContextType {
   selectDataset: (datasetName: string | null) => void;
   selectTable: (tableId: string | null) => void;
   sendMessage: (message: string) => Promise<void>;
-  reEnrich: () => Promise<void>;
   updateMetadataField: (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => Promise<void>;
+  enrichDataset: (datasetName: string) => Promise<void>;
+  enrichTable: (datasetName: string, tableName: string) => Promise<void>;
 }
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
@@ -31,6 +33,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [selectedDataset, setSelectedDataset] = useState<EnrichedDataset | null>(null);
   const [selectedTable, setSelectedTable] = useState<EnrichedTable | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AppChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -91,6 +94,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     if (!datasetName) {
       setCurrentSelectedDatasetId(null);
       setCurrentSelectedTableId(null); 
+      setChatMessages([]);
       return;
     }
     const ds = catalog?.datasets.find(d => d.name === datasetName);
@@ -122,44 +126,69 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.error || 'File upload failed');
       }
       const data = await response.json();
-      setCatalog(data.catalog); // Directly set catalog from successful upload response
-      setCurrentSelectedDatasetId(null); // Reset selections
+      setCatalog(data.catalog); 
+      setCurrentSelectedDatasetId(null); 
       setCurrentSelectedTableId(null);
       setSelectedDataset(null);
       setSelectedTable(null);
       setChatMessages([]);
-      toast({ title: "Success", description: "File uploaded and metadata enriched." });
+      toast({ title: "Success", description: "File uploaded successfully. You can now enrich datasets/tables individually." });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(newError);
-      toast({ title: "Error", description: newError, variant: "destructive" });
+      toast({ title: "Upload Error", description: newError, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const reEnrich = async () => {
-    setIsLoading(true);
+  const enrichDataset = async (datasetName: string) => {
+    setIsEnriching(true);
     setError(null);
     try {
-      const response = await fetch('/api/catalog/enrich', { method: 'POST' });
+      const response = await fetch('/api/catalog/enrich-dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetName }),
+      });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Metadata re-enrichment failed. This could be due to an AI processing error or no initial data being available for enrichment.');
+        throw new Error(errorData.error || `Failed to enrich dataset ${datasetName}`);
       }
       const data = await response.json();
-      setCatalog(data.catalog); // Update catalog with re-enriched data
-      setCurrentSelectedDatasetId(null); 
-      setCurrentSelectedTableId(null);
-      setSelectedDataset(null);
-      setSelectedTable(null);
-      toast({ title: "Success", description: "Metadata re-enriched successfully." });
+      setCatalog(data.catalog); // Update catalog with enriched data
+      toast({ title: "Dataset Enriched", description: data.message });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(newError);
-      toast({ title: "Error", description: newError, variant: "destructive" });
+      toast({ title: "Enrichment Error", description: newError, variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsEnriching(false);
+    }
+  };
+
+  const enrichTable = async (datasetName: string, tableName: string) => {
+    setIsEnriching(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/catalog/enrich-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetName, tableName }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to enrich table ${tableName}`);
+      }
+      const data = await response.json();
+      setCatalog(data.catalog); // Update catalog with enriched data
+      toast({ title: "Table Enriched", description: data.message });
+    } catch (err) {
+      const newError = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(newError);
+      toast({ title: "Enrichment Error", description: newError, variant: "destructive" });
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -168,27 +197,18 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       toast({ title: "No Dataset Selected", description: "Please select a dataset before sending a message.", variant: "destructive" });
       return;
     }
-
     const userMessage: AppChatMessage = { id: Date.now().toString(), sender: 'user', content: message, timestamp: new Date() };
-    
-    const historyToPass: ChatMessageHistory[] = chatMessages
-      .map(msg => ({
+    const historyToPass: ChatMessageHistory[] = chatMessages.map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }],
       }));
-
     setChatMessages(prev => [...prev, userMessage]);
     setIsChatLoading(true);
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: message, 
-          selectedDatasetName: selectedDataset.name,
-          history: historyToPass 
-        }),
+        body: JSON.stringify({ query: message, selectedDatasetName: selectedDataset.name, history: historyToPass }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -208,7 +228,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   };
 
   const updateMetadataField = async (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => {
-    // 1. Optimistically update client-side catalog
     let itemType: 'dataset' | 'table' | 'column' | null = null;
     const parts = itemId.split('/');
     if (parts.length === 1) itemType = 'dataset';
@@ -218,74 +237,52 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     setCatalog(currentCatalog => {
       if (!currentCatalog) return null;
       const newCatalog = JSON.parse(JSON.stringify(currentCatalog)) as CatalogData; 
-
       for (const dataset of newCatalog.datasets) {
         if (dataset.id === itemId && itemType === 'dataset') {
-          if (fieldKey === 'description') dataset.description = newValue;
-          else if (fieldKey === 'tags') dataset.tags = newValue;
+          if (fieldKey === 'description') dataset.description = newValue; else if (fieldKey === 'tags') dataset.tags = newValue;
           return newCatalog;
         }
         for (const table of dataset.tables) {
           if (table.id === itemId && itemType === 'table') {
-            if (fieldKey === 'description') table.description = newValue;
-            else if (fieldKey === 'tags') table.tags = newValue;
+            if (fieldKey === 'description') table.description = newValue; else if (fieldKey === 'tags') table.tags = newValue;
             return newCatalog;
           }
           for (const column of table.columns) {
             if (column.id === itemId && itemType === 'column') {
-              if (fieldKey === 'description') column.description = newValue;
-              else if (fieldKey === 'tags') column.tags = newValue;
+              if (fieldKey === 'description') column.description = newValue; else if (fieldKey === 'tags') column.tags = newValue;
               return newCatalog;
             }
           }
         }
       }
-      console.warn(`[CatalogProvider] updateMetadataField (client): Item with ID ${itemId} not found for optimistic update.`);
       return currentCatalog; 
     });
-
-    // 2. Call API to update server-side rawDataForEnrichment
     try {
       const response = await fetch('/api/catalog/update-raw-field', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemId, fieldKey, newValue }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
-        // Attempt to revert optimistic update if server save fails
-        fetchCatalog(); // Refetch to get consistent state
+        fetchCatalog(); 
         toast({ title: "Save Error", description: `Server failed to save: ${errorData.error || 'Unknown server error'}. Client changes reverted.`, variant: "destructive" });
-        return; // Important to stop here
+        return; 
       }
       toast({ title: "Metadata Saved", description: `Changes to ${fieldKey} for item ${parts.pop()} saved.`});
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred while saving metadata.';
-      // Attempt to revert optimistic update if server save fails
-      fetchCatalog(); // Refetch to get consistent state
+      fetchCatalog(); 
       toast({ title: "Save Error", description: `${errorMessage}. Client changes reverted.`, variant: "destructive" });
-      console.error("[CatalogProvider] Failed to save metadata update to server:", err);
     }
   };
 
 
   return (
     <CatalogContext.Provider value={{
-      catalog,
-      selectedDataset,
-      selectedTable,
-      isLoading,
-      error,
-      chatMessages,
-      isChatLoading,
-      fetchCatalog,
-      uploadFile,
-      selectDataset,
-      selectTable,
-      sendMessage,
-      reEnrich,
-      updateMetadataField
+      catalog, selectedDataset, selectedTable, isLoading, isEnriching, error,
+      chatMessages, isChatLoading, fetchCatalog, uploadFile, selectDataset,
+      selectTable, sendMessage, updateMetadataField, enrichDataset, enrichTable
     }}>
       {children}
     </CatalogContext.Provider>
@@ -299,4 +296,3 @@ export function useCatalog() {
   }
   return context;
 }
-

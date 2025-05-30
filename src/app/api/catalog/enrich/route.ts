@@ -1,21 +1,11 @@
 
 // src/app/api/catalog/enrich/route.ts
+// THIS ROUTE IS NO LONGER USED FOR GLOBAL ENRICHMENT.
+// Enrichment is now handled at individual dataset/table levels.
+// Keeping the file to avoid 404s if old client code tries to hit it, but it will do nothing.
 import { NextResponse } from 'next/server';
-import { reEnrichCatalog } from '@/lib/catalog-store';
 
 export async function POST() {
-  try {
-    const newCatalog = await reEnrichCatalog();
-    if (!newCatalog) {
-      // Check if rawDataForEnrichment was null to provide a more specific message
-      // This check needs to be done carefully, ideally reEnrichCatalog would signal this.
-      // For now, assume null means AI enrichment phase failed or no raw data.
-      return NextResponse.json({ error: 'Failed to re-enrich catalog. This could be due to an AI processing error or no initial data being available for enrichment.' }, { status: 400 });
-    }
-    return NextResponse.json({ message: 'Catalog re-enriched successfully.', catalog: newCatalog }, { status: 200 });
-  } catch (error) {
-    console.error('Re-enrich Catalog API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during re-enrichment.';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
-  }
+  console.warn("POST /api/catalog/enrich is deprecated. Enrichment is now per-dataset/table.");
+  return NextResponse.json({ message: 'This global enrichment endpoint is deprecated. Use per-dataset or per-table enrichment.', catalog: null }, { status: 410 }); // 410 Gone
 }
