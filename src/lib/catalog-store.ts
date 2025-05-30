@@ -1,21 +1,23 @@
-
 // src/lib/catalog-store.ts
 import type { CatalogData, EnrichedDataset, EnrichedTable, EnrichedColumn, RawDataset, RawTable, RawColumn } from '@/types';
 import { enrichSingleDataset, type EnrichDatasetInput, type EnrichDatasetOutput } from '@/ai/flows/enrich-dataset-flow';
 import { enrichSingleTable, type EnrichTableInput, type EnrichTableOutput } from '@/ai/flows/enrich-table-flow';
 import type { ExtractKeysFromSqlOutput } from '@/ai/flows/extract-keys-from-sql-flow';
-
+import { addLog } from './log-store'; // Import addLog
 
 let catalog: CatalogData = { datasets: [] };
 let rawDataForEnrichment: { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] } | null = null;
 
 // Helper to transform raw data (from Excel) to initial Enriched CatalogData (without AI)
 function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] }): CatalogData {
+  addLog("[CatalogStore-RawToInitial] Starting transformation of raw data to initial catalog structure.");
   const datasetsMap = new Map<string, EnrichedDataset>();
 
   (raw.datasets || []).forEach(rd => {
     if (!rd || !rd.Dataset_name) {
-      console.warn(`[CatalogStore-RawToInitial] Skipping raw dataset with missing Dataset_name: ${JSON.stringify(rd)}`);
+      const warningMsg = `[CatalogStore-RawToInitial] Skipping raw dataset with missing Dataset_name: ${JSON.stringify(rd)}`;
+      console.warn(warningMsg);
+      addLog(warningMsg);
       return;
     }
     datasetsMap.set(rd.Dataset_name, {
@@ -25,14 +27,17 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
       tags: rd.Tags ?? null,
       source: rd.source ?? null,
       location: rd.location ?? null,
-      sensitivity: 'unknown', // Default, to be enriched later
+      sensitivity: 'unknown', 
       tables: [],
     });
   });
+  addLog(`[CatalogStore-RawToInitial] Processed ${datasetsMap.size} raw datasets into initial map.`);
 
   (raw.tables || []).forEach(rt => {
     if (!rt || !rt.Dataset_name || !rt.TABLE_NAME) {
-      console.warn(`[CatalogStore-RawToInitial] Skipping raw table with missing identifiers: ${JSON.stringify(rt)}`);
+      const warningMsg = `[CatalogStore-RawToInitial] Skipping raw table with missing identifiers: ${JSON.stringify(rt)}`;
+      console.warn(warningMsg);
+      addLog(warningMsg);
       return;
     }
     const dataset = datasetsMap.get(rt.Dataset_name);
@@ -44,12 +49,16 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
         .filter(rc => rc && rc.TABLE_NAME === rt.TABLE_NAME)
         .forEach(rc => {
           if (!rc.COLUMN_NAME) {
-            console.warn(`[CatalogStore-RawToInitial] Skipping raw column due to missing COLUMN_NAME for table ${rt.TABLE_NAME}: ${JSON.stringify(rc)}`);
+            const colWarningMsg = `[CatalogStore-RawToInitial] Skipping raw column due to missing COLUMN_NAME for table ${rt.TABLE_NAME}: ${JSON.stringify(rc)}`;
+            console.warn(colWarningMsg);
+            addLog(colWarningMsg);
             return;
           }
           const columnId = `${dataset.name}/${rt.TABLE_NAME}/${rc.COLUMN_NAME}`;
           if (uniqueColumnTracker.has(columnId)) {
-            console.warn(`[CatalogStore-RawToInitial] Duplicate raw column ID skipped: ${columnId}`);
+            const dupColMsg = `[CatalogStore-RawToInitial] Duplicate raw column ID skipped: ${columnId}`;
+            console.warn(dupColMsg);
+            addLog(dupColMsg);
             return;
           }
           uniqueColumnTracker.add(columnId);
@@ -62,7 +71,7 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
             dataType: rc.DATA_TYPE ?? null,
             isPrimaryKey: String(rc.PRIMARY_KEY).toLowerCase() === 'true',
             isForeignKey: String(rc.FOREIGN_KEY).toLowerCase() === 'true',
-            sensitivity: rc.Sensitivity ?? 'unknown', // Default
+            sensitivity: rc.Sensitivity ?? 'unknown', 
             location: rc.location ?? null,
           });
         });
@@ -76,54 +85,64 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
         name: rt.TABLE_NAME,
         description: rt.Description ?? null,
         tags: rt.Table_tags ?? null,
-        sensitivity: rt.Sensitivity ?? 'unknown', // Default
+        sensitivity: rt.Sensitivity ?? 'unknown', 
         source: rt.source ?? null,
         location: rt.location ?? null,
         databaseName: rt.DATABASE_NAME ?? null,
         schemaName: rt.SCHEMA_NAME ?? null,
         owner: rt.OWNER ?? null,
-        primaryKeys: primaryKeysString, // Use derived PK string
-        foreignKeys: foreignKeysString, // Use derived FK string
+        primaryKeys: primaryKeysString,
+        foreignKeys: foreignKeysString,
         createdDate: rt.CREATED_DATE ?? null,
         updatedDate: rt.UPDATED_DATE ?? null,
         rowCount: rt.Row_count ? parseInt(String(rt.Row_count), 10) : undefined,
         columns: tableColumns,
       });
     } else {
-      console.warn(`[CatalogStore-RawToInitial] Raw table ${rt.TABLE_NAME} refers to non-existent dataset ${rt.Dataset_name}`);
+      const tableDsWarn = `[CatalogStore-RawToInitial] Raw table ${rt.TABLE_NAME} refers to non-existent dataset ${rt.Dataset_name}`;
+      console.warn(tableDsWarn);
+      addLog(tableDsWarn);
     }
   });
-  return { datasets: Array.from(datasetsMap.values()) };
+  addLog(`[CatalogStore-RawToInitial] Finished processing raw tables and columns.`);
+  const finalCatalog = { datasets: Array.from(datasetsMap.values()) };
+  addLog(`[CatalogStore-RawToInitial] Transformation complete. Catalog has ${finalCatalog.datasets.length} datasets.`);
+  return finalCatalog;
 }
 
 
 export async function initializeCatalog(rawD: RawDataset[], rawT: RawTable[], rawC: RawColumn[]): Promise<CatalogData> {
-  console.log("[CatalogStore] Initializing catalog with raw data. Enrichment is user-triggered per dataset/table.");
+  addLog("[CatalogStore] Initializing catalog with raw data. Enrichment is now user-triggered per dataset/table.");
   const rawFullData = { datasets: rawD, tables: rawT, columns: rawC };
   storeRawDataForEnrichment(rawFullData);
   
   catalog = transformRawToInitialCatalog(rawFullData);
-  console.log("[CatalogStore] Initial catalog built from raw data. No automatic AI enrichment on upload.");
+  addLog("[CatalogStore] Initial catalog built from raw data. No automatic AI enrichment on upload.");
   return catalog;
 }
 
 export async function enrichSingleDatasetInStore(datasetName: string): Promise<EnrichedDataset | null> {
+  addLog(`[CatalogStore] enrichSingleDatasetInStore: Attempting to enrich dataset: ${datasetName}`);
   if (!rawDataForEnrichment) {
-    console.warn("[CatalogStore] No raw data available to enrich dataset.");
+    const noRawMsg = "[CatalogStore] enrichSingleDatasetInStore: No raw data available to enrich dataset.";
+    console.warn(noRawMsg);
+    addLog(noRawMsg);
     return null;
   }
   const rawDataset = rawDataForEnrichment.datasets.find(d => d.Dataset_name === datasetName);
   if (!rawDataset) {
-    console.warn(`[CatalogStore] Raw dataset ${datasetName} not found for enrichment.`);
+    const notFoundMsg = `[CatalogStore] enrichSingleDatasetInStore: Raw dataset ${datasetName} not found for enrichment.`;
+    console.warn(notFoundMsg);
+    addLog(notFoundMsg);
     return null;
   }
 
   const tableNamesInDataset = rawDataForEnrichment.tables
     .filter(t => t.Dataset_name === datasetName)
     .map(t => t.TABLE_NAME);
+  addLog(`[CatalogStore] enrichSingleDatasetInStore: Found ${tableNamesInDataset.length} tables for context for dataset ${datasetName}.`);
 
   try {
-    console.log(`[CatalogStore] Enriching dataset: ${datasetName}`);
     const aiInput: EnrichDatasetInput = {
       datasetToEnrich: { 
         Dataset_name: rawDataset.Dataset_name,
@@ -134,7 +153,9 @@ export async function enrichSingleDatasetInStore(datasetName: string): Promise<E
       },
       tableNamesInDataset,
     };
+    addLog(`[CatalogStore] enrichSingleDatasetInStore: Calling AI for dataset ${datasetName}. Input: ${JSON.stringify(aiInput).substring(0,300)}...`);
     const enrichedOutput: EnrichDatasetOutput = await enrichSingleDataset(aiInput);
+    addLog(`[CatalogStore] enrichSingleDatasetInStore: AI enrichment successful for dataset ${datasetName}. Output: ${JSON.stringify(enrichedOutput).substring(0,300)}...`);
 
     const datasetIndex = catalog.datasets.findIndex(d => d.name === datasetName);
     if (datasetIndex > -1) {
@@ -146,19 +167,25 @@ export async function enrichSingleDatasetInStore(datasetName: string): Promise<E
         rawDataForEnrichment.datasets[rawDatasetIndex].Dataset_description = enrichedOutput.Dataset_description ?? rawDataForEnrichment.datasets[rawDatasetIndex].Dataset_description;
         rawDataForEnrichment.datasets[rawDatasetIndex].Tags = enrichedOutput.Tags ?? rawDataForEnrichment.datasets[rawDatasetIndex].Tags;
       }
-      console.log(`[CatalogStore] Dataset ${datasetName} enriched and updated in-memory catalog and rawDataForEnrichment.`);
+      addLog(`[CatalogStore] enrichSingleDatasetInStore: Dataset ${datasetName} updated in-memory catalog and rawDataForEnrichment.`);
       return catalog.datasets[datasetIndex];
     }
+    addLog(`[CatalogStore] enrichSingleDatasetInStore: Dataset ${datasetName} not found in live catalog after enrichment (should not happen).`);
     return null;
   } catch (error) {
-    console.error(`[CatalogStore] Error enriching dataset ${datasetName}:`, error);
+    const errorMsg = `[CatalogStore] enrichSingleDatasetInStore: Error enriching dataset ${datasetName}: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(errorMsg, error);
+    addLog(errorMsg);
     return null;
   }
 }
 
 export async function enrichSingleTableInStore(datasetName: string, tableName: string): Promise<EnrichedTable | null> {
+  addLog(`[CatalogStore] enrichSingleTableInStore: Attempting to enrich table: ${tableName} in dataset: ${datasetName}`);
   if (!rawDataForEnrichment) {
-    console.warn("[CatalogStore] No raw data available to enrich table.");
+    const noRawMsg = "[CatalogStore] enrichSingleTableInStore: No raw data available to enrich table.";
+    console.warn(noRawMsg);
+    addLog(noRawMsg);
     return null;
   }
   const rawDataset = rawDataForEnrichment.datasets.find(d => d.Dataset_name === datasetName);
@@ -167,64 +194,72 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
 
 
   if (!rawDataset || !rawTable) {
-    console.warn(`[CatalogStore] Raw dataset ${datasetName} or table ${tableName} not found for enrichment.`);
+    const notFoundMsg = `[CatalogStore] enrichSingleTableInStore: Raw dataset ${datasetName} or table ${tableName} not found for enrichment.`;
+    console.warn(notFoundMsg);
+    addLog(notFoundMsg);
     return null;
   }
+  addLog(`[CatalogStore] enrichSingleTableInStore: Found raw data for table ${tableName}. Columns count: ${rawColumnsForTable.length}`);
   
   const otherTableNamesInDataset = rawDataForEnrichment.tables
     .filter(t => t.Dataset_name === datasetName && t.TABLE_NAME !== tableName)
     .map(t => t.TABLE_NAME);
   
   try {
-    console.log(`[CatalogStore] enrichSingleTableInStore - Enriching table: ${tableName} in dataset: ${datasetName}`);
     const aiInput: EnrichTableInput = {
       datasetContext: { Dataset_name: rawDataset.Dataset_name, Dataset_description: rawDataset.Dataset_description ?? "" },
       tableToEnrich: { ...rawTable }, 
       columnsToEnrich: JSON.parse(JSON.stringify(rawColumnsForTable)), 
       otherTableNamesInDataset,
     };
-     console.log(`[CatalogStore] enrichSingleTableInStore - AI Input for table ${tableName}:`, JSON.stringify(aiInput, null, 2).substring(0,1000) + "...");
+    addLog(`[CatalogStore] enrichSingleTableInStore: Calling AI for table ${tableName}. Input (snippet): ${JSON.stringify(aiInput.tableToEnrich).substring(0,200)}... Columns (count): ${aiInput.columnsToEnrich.length}`);
 
 
     const aiOutput: EnrichTableOutput = await enrichSingleTable(aiInput);
-    console.log(`[CatalogStore] enrichSingleTableInStore - AI Output for table ${tableName}:`, JSON.stringify(aiOutput, null, 2).substring(0,1000) + "...");
+    addLog(`[CatalogStore] enrichSingleTableInStore: AI enrichment successful for table ${tableName}. Output (snippet): ${JSON.stringify(aiOutput.enrichedTable).substring(0,200)}... Columns (count): ${aiOutput.enrichedColumns.length}`);
 
 
     const datasetInCatalog = catalog.datasets.find(d => d.name === datasetName);
     if (!datasetInCatalog) {
-        console.error(`[CatalogStore] enrichSingleTableInStore - Dataset ${datasetName} not found in live catalog during merge.`);
+        const dsNotFoundMsg = `[CatalogStore] enrichSingleTableInStore: Dataset ${datasetName} not found in live catalog during merge.`;
+        console.error(dsNotFoundMsg);
+        addLog(dsNotFoundMsg);
         return null;
     }
     const tableIndexInCatalog = datasetInCatalog.tables.findIndex(t => t.name === tableName);
     if (tableIndexInCatalog === -1) {
-        console.error(`[CatalogStore] enrichSingleTableInStore - Table ${tableName} not found in live catalog dataset ${datasetName} during merge.`);
+        const tblNotFoundMsg = `[CatalogStore] enrichSingleTableInStore: Table ${tableName} not found in live catalog dataset ${datasetName} during merge.`;
+        console.error(tblNotFoundMsg);
+        addLog(tblNotFoundMsg);
         return null;
     }
 
     if (!aiOutput || !aiOutput.enrichedTable || !Array.isArray(aiOutput.enrichedColumns)) {
-        const errorMsg = `AI output for table ${tableName} was malformed or incomplete.`;
-        console.error(`[CatalogStore] enrichSingleTableInStore - ${errorMsg} AI Output:`, JSON.stringify(aiOutput, null, 2).substring(0,1000));
-        throw new Error(errorMsg);
+        const malformedMsg = `[CatalogStore] enrichSingleTableInStore: AI output for table ${tableName} was malformed or incomplete.`;
+        console.error(malformedMsg, 'AI Output:', JSON.stringify(aiOutput).substring(0,1000));
+        addLog(malformedMsg + ` AI Output (snippet): ${JSON.stringify(aiOutput).substring(0,200)}...`);
+        throw new Error(malformedMsg);
     }
 
     const enrichedTableFromAI = aiOutput.enrichedTable;
     const enrichedColumnsFromAI = aiOutput.enrichedColumns;
 
     const currentTableInCatalog = datasetInCatalog.tables[tableIndexInCatalog];
-    // Update enriched fields, falling back to original if AI doesn't provide them
+    
     currentTableInCatalog.description = enrichedTableFromAI.Description ?? currentTableInCatalog.description;
     currentTableInCatalog.tags = enrichedTableFromAI.Table_tags ?? currentTableInCatalog.tags;
     currentTableInCatalog.sensitivity = enrichedTableFromAI.Sensitivity ?? currentTableInCatalog.sensitivity ?? 'unknown';
     
-    // Preserve non-AI enriched fields from the original table
-    currentTableInCatalog.source = rawTable.source ?? currentTableInCatalog.source;
-    currentTableInCatalog.location = rawTable.location ?? currentTableInCatalog.location;
-    currentTableInCatalog.databaseName = rawTable.DATABASE_NAME ?? currentTableInCatalog.databaseName;
-    currentTableInCatalog.schemaName = rawTable.SCHEMA_NAME ?? currentTableInCatalog.schemaName;
-    currentTableInCatalog.owner = rawTable.OWNER ?? currentTableInCatalog.owner;
-    currentTableInCatalog.createdDate = rawTable.CREATED_DATE ?? currentTableInCatalog.createdDate;
-    currentTableInCatalog.updatedDate = rawTable.UPDATED_DATE ?? currentTableInCatalog.updatedDate;
-    currentTableInCatalog.rowCount = rawTable.Row_count ? parseInt(String(rawTable.Row_count),10) : currentTableInCatalog.rowCount;
+    currentTableInCatalog.source = enrichedTableFromAI.source ?? currentTableInCatalog.source;
+    currentTableInCatalog.location = enrichedTableFromAI.location ?? currentTableInCatalog.location;
+    currentTableInCatalog.databaseName = enrichedTableFromAI.DATABASE_NAME ?? currentTableInCatalog.databaseName;
+    currentTableInCatalog.schemaName = enrichedTableFromAI.SCHEMA_NAME ?? currentTableInCatalog.schemaName;
+    currentTableInCatalog.owner = enrichedTableFromAI.OWNER ?? currentTableInCatalog.owner;
+    currentTableInCatalog.createdDate = enrichedTableFromAI.CREATED_DATE ?? currentTableInCatalog.createdDate;
+    currentTableInCatalog.updatedDate = enrichedTableFromAI.UPDATED_DATE ?? currentTableInCatalog.updatedDate;
+    currentTableInCatalog.rowCount = (enrichedTableFromAI.Row_count !== undefined && enrichedTableFromAI.Row_count !== null) 
+                                     ? parseInt(String(enrichedTableFromAI.Row_count),10) 
+                                     : currentTableInCatalog.rowCount;
 
 
     const rawTableIndex = rawDataForEnrichment.tables.findIndex(t => t.Dataset_name === datasetName && t.TABLE_NAME === tableName);
@@ -232,11 +267,15 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
       rawDataForEnrichment.tables[rawTableIndex].Description = currentTableInCatalog.description;
       rawDataForEnrichment.tables[rawTableIndex].Table_tags = currentTableInCatalog.tags;
       rawDataForEnrichment.tables[rawTableIndex].Sensitivity = currentTableInCatalog.sensitivity;
+      // Persist other fields to raw if AI provided them and they were different
+      rawDataForEnrichment.tables[rawTableIndex].source = currentTableInCatalog.source;
+      rawDataForEnrichment.tables[rawTableIndex].location = currentTableInCatalog.location;
+      // ... and so on for other table fields if AI is allowed to change them
     }
     
     const updatedColumnsForCatalog: EnrichedColumn[] = [];
-    for (const originalInputColumn of rawColumnsForTable) { // Iterate over original raw columns to ensure all are processed
-      const colAI = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === originalInputColumn.COLUMN_NAME);
+    for (const originalInputColumn of rawColumnsForTable) { 
+      const colAI = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === originalInputColumn.COLUMN_NAME && c.TABLE_NAME === tableName);
       
       const updatedCol: EnrichedColumn = {
         id: `${datasetName}/${tableName}/${originalInputColumn.COLUMN_NAME}`,
@@ -258,8 +297,8 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
         rawDataForEnrichment.columns[rawColIndex].Sensitivity = updatedCol.sensitivity;
         rawDataForEnrichment.columns[rawColIndex].PRIMARY_KEY = updatedCol.isPrimaryKey ? 'true' : 'false';
         rawDataForEnrichment.columns[rawColIndex].FOREIGN_KEY = updatedCol.isForeignKey ? 'true' : 'false';
-        rawDataForEnrichment.columns[rawColIndex].DATA_TYPE = updatedCol.dataType; // Persist data type from AI if available
-        rawDataForEnrichment.columns[rawColIndex].location = updatedCol.location; // Persist location
+        rawDataForEnrichment.columns[rawColIndex].DATA_TYPE = updatedCol.dataType;
+        rawDataForEnrichment.columns[rawColIndex].location = updatedCol.location;
       }
     }
     currentTableInCatalog.columns = updatedColumnsForCatalog;
@@ -267,17 +306,20 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
     currentTableInCatalog.foreignKeys = updatedColumnsForCatalog.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
 
 
-    console.log(`[CatalogStore] Table ${tableName} in dataset ${datasetName} enriched and updated in-memory catalog and rawDataForEnrichment.`);
+    addLog(`[CatalogStore] enrichSingleTableInStore: Table ${tableName} updated in-memory catalog and rawDataForEnrichment. Columns processed: ${updatedColumnsForCatalog.length}.`);
     return currentTableInCatalog;
 
   } catch (error) {
-    console.error(`[CatalogStore] Error enriching table ${tableName} in dataset ${datasetName}:`, error);
+    const errorMsg = `[CatalogStore] enrichSingleTableInStore: Error enriching table ${tableName} in dataset ${datasetName}: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(errorMsg, error);
+    addLog(errorMsg);
     return null;
   }
 }
 
 
 export function getCatalog(): CatalogData {
+  // addLog("[CatalogStore] getCatalog called."); // Can be too noisy
   return JSON.parse(JSON.stringify(catalog)); 
 }
 
@@ -305,14 +347,17 @@ export function getTableMetadata(datasetName: string, tableName: string): string
 
 export function storeRawDataForEnrichment(data: { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] }) {
   rawDataForEnrichment = JSON.parse(JSON.stringify(data));
-  console.log("[CatalogStore] Stored raw data for enrichment.");
+  addLog("[CatalogStore] Stored raw data for enrichment. Datasets: " + (data.datasets?.length || 0) + ", Tables: " + (data.tables?.length || 0) + ", Columns: " + (data.columns?.length || 0));
 }
 
 
 export function updateRawDataField(itemId: string, fieldKeyToUpdate: 'description' | 'tags', newValue: string): boolean {
+  addLog(`[CatalogStore-UpdateRaw] Request to update item: ${itemId}, field: ${fieldKeyToUpdate}, newValue: ${newValue.substring(0,50)}...`);
   let rawDataUpdated = false;
   if (!rawDataForEnrichment) {
-    console.warn("[CatalogStore-UpdateRaw] No raw data available to update.");
+    const noRawMsg = "[CatalogStore-UpdateRaw] No raw data available to update.";
+    console.warn(noRawMsg);
+    addLog(noRawMsg);
     return false;
   }
   
@@ -374,39 +419,44 @@ export function updateRawDataField(itemId: string, fieldKeyToUpdate: 'descriptio
     }
   }
 
-  if (rawDataUpdated) console.log(`[CatalogStore-UpdateRaw] Successfully updated rawDataForEnrichment for item ${itemId}. Field: ${fieldKeyToUpdate}`);
-  if (catalogItemUpdated) console.log(`[CatalogStore-UpdateInMemoryCatalog] Successfully updated in-memory 'catalog' for item ${itemId}. Field: ${fieldKeyToUpdate}`);
+  if (rawDataUpdated) addLog(`[CatalogStore-UpdateRaw] Successfully updated rawDataForEnrichment for item ${itemId}. Field: ${fieldKeyToUpdate}`);
+  if (catalogItemUpdated) addLog(`[CatalogStore-UpdateInMemoryCatalog] Successfully updated in-memory 'catalog' for item ${itemId}. Field: ${fieldKeyToUpdate}`);
   
-  if (!rawDataUpdated) console.warn(`[CatalogStore-UpdateRaw] Failed to find and update item ${itemId} in rawDataForEnrichment.`);
-  if (!catalogItemUpdated) console.warn(`[CatalogStore-UpdateInMemoryCatalog] Failed to find and update item ${itemId} in in-memory 'catalog'.`);
+  if (!rawDataUpdated) addLog(`[CatalogStore-UpdateRaw] Failed to find or update item ${itemId} in rawDataForEnrichment.`);
+  if (!catalogItemUpdated) addLog(`[CatalogStore-UpdateInMemoryCatalog] Failed to find or update item ${itemId} in in-memory 'catalog'.`);
 
   return rawDataUpdated && catalogItemUpdated;
 }
 
 
 export function updateKeysFromSqlAnalysis(datasetName: string, targetTableName: string | undefined, keyInfo: ExtractKeysFromSqlOutput): boolean {
+  addLog(`[CatalogStore-UpdateKeysSQL] Starting update for dataset: ${datasetName}, table: ${targetTableName || 'all relevant'}, keyInfo: ${JSON.stringify(keyInfo).substring(0,300)}...`);
   if (!rawDataForEnrichment) {
-    console.warn("[CatalogStore-UpdateKeysSQL] No raw data available.");
+    const noRawMsg = "[CatalogStore-UpdateKeysSQL] No raw data available.";
+    console.warn(noRawMsg);
+    addLog(noRawMsg);
     return false;
   }
   if (!catalog) {
-    console.warn("[CatalogStore-UpdateKeysSQL] Live catalog not available.");
+    const noCatMsg = "[CatalogStore-UpdateKeysSQL] Live catalog not available.";
+    console.warn(noCatMsg);
+    addLog(noCatMsg);
     return false;
   }
 
   let changesMade = false;
   const datasetInCatalog = catalog.datasets.find(d => d.name === datasetName);
   if (!datasetInCatalog) {
-    console.warn(`[CatalogStore-UpdateKeysSQL] Dataset ${datasetName} not found in live catalog.`);
+    const dsNotFoundMsg = `[CatalogStore-UpdateKeysSQL] Dataset ${datasetName} not found in live catalog.`;
+    console.warn(dsNotFoundMsg);
+    addLog(dsNotFoundMsg);
     return false;
   }
 
-  // Reset all existing PK/FK flags in the raw data for the affected tables before applying new ones.
-  // If targetTableName is specified, only reset for that table. Otherwise, reset for all tables in the dataset
-  // that are mentioned in the AI's keyInfo.
   const tablesToResetKeys = targetTableName 
     ? [targetTableName] 
     : Array.from(new Set([...keyInfo.primaryKeys.map(k => k.tableName), ...keyInfo.foreignKeys.map(k => k.tableName)]));
+  addLog(`[CatalogStore-UpdateKeysSQL] Tables to reset/update keys for: ${tablesToResetKeys.join(', ')}`);
 
   tablesToResetKeys.forEach(tableNameFromAI => {
     rawDataForEnrichment.columns.forEach(rawCol => {
@@ -423,21 +473,27 @@ export function updateKeysFromSqlAnalysis(datasetName: string, targetTableName: 
       });
     }
   });
+  addLog(`[CatalogStore-UpdateKeysSQL] Finished resetting PK/FK flags for relevant tables.`);
 
 
   keyInfo.primaryKeys.forEach(pk => {
-    if (targetTableName && pk.tableName !== targetTableName) return; // Skip if table-specific and PK is for another table
+    if (targetTableName && pk.tableName !== targetTableName) return; 
 
     const rawCol = rawDataForEnrichment.columns.find(c => c.TABLE_NAME === pk.tableName && c.COLUMN_NAME === pk.columnName && rawDataForEnrichment.tables.some(t => t.TABLE_NAME === pk.tableName && t.Dataset_name === datasetName));
     if (rawCol) {
-      rawCol.PRIMARY_KEY = 'true';
-      changesMade = true;
+      if (rawCol.PRIMARY_KEY !== 'true') {
+        rawCol.PRIMARY_KEY = 'true';
+        changesMade = true;
+        addLog(`[CatalogStore-UpdateKeysSQL] Raw PK updated: ${pk.tableName}.${pk.columnName}`);
+      }
     }
     const tableInCatalog = datasetInCatalog.tables.find(t => t.name === pk.tableName);
     if (tableInCatalog) {
       const colInCatalog = tableInCatalog.columns.find(c => c.name === pk.columnName);
-      if (colInCatalog) {
+      if (colInCatalog && !colInCatalog.isPrimaryKey) {
         colInCatalog.isPrimaryKey = true;
+        changesMade = true; // Count change if live catalog is updated
+         addLog(`[CatalogStore-UpdateKeysSQL] Catalog PK updated: ${pk.tableName}.${pk.columnName}`);
       }
     }
   });
@@ -447,34 +503,42 @@ export function updateKeysFromSqlAnalysis(datasetName: string, targetTableName: 
 
     const rawCol = rawDataForEnrichment.columns.find(c => c.TABLE_NAME === fk.tableName && c.COLUMN_NAME === fk.columnName && rawDataForEnrichment.tables.some(t => t.TABLE_NAME === fk.tableName && t.Dataset_name === datasetName));
     if (rawCol) {
-      rawCol.FOREIGN_KEY = 'true';
-      // We don't store referencedTable/Column in raw data currently, but could be added
-      changesMade = true;
+      if (rawCol.FOREIGN_KEY !== 'true') {
+        rawCol.FOREIGN_KEY = 'true';
+        changesMade = true;
+         addLog(`[CatalogStore-UpdateKeysSQL] Raw FK updated: ${fk.tableName}.${fk.columnName}`);
+      }
     }
     const tableInCatalog = datasetInCatalog.tables.find(t => t.name === fk.tableName);
     if (tableInCatalog) {
       const colInCatalog = tableInCatalog.columns.find(c => c.name === fk.columnName);
-      if (colInCatalog) {
+      if (colInCatalog && !colInCatalog.isForeignKey) {
         colInCatalog.isForeignKey = true;
-        // We could store referencedTable/Column on EnrichedColumn if needed
+        changesMade = true; // Count change
+        addLog(`[CatalogStore-UpdateKeysSQL] Catalog FK updated: ${fk.tableName}.${fk.columnName}`);
       }
     }
   });
 
-  // After updating column flags, regenerate the primaryKeys and foreignKeys summary strings for affected tables in the live catalog.
   tablesToResetKeys.forEach(tableNameToUpdate => {
       const tableInCatalog = datasetInCatalog.tables.find(t => t.name === tableNameToUpdate);
       if (tableInCatalog) {
-          tableInCatalog.primaryKeys = tableInCatalog.columns.filter(c => c.isPrimaryKey).map(c => c.name).join(', ') || null;
-          tableInCatalog.foreignKeys = tableInCatalog.columns.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
-          console.log(`[CatalogStore-UpdateKeysSQL] Updated PK/FK summary strings for table ${tableInCatalog.name}: PKs: ${tableInCatalog.primaryKeys}, FKs: ${tableInCatalog.foreignKeys}`);
+          const newPrimaryKeys = tableInCatalog.columns.filter(c => c.isPrimaryKey).map(c => c.name).join(', ') || null;
+          const newForeignKeys = tableInCatalog.columns.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
+          
+          if(tableInCatalog.primaryKeys !== newPrimaryKeys || tableInCatalog.foreignKeys !== newForeignKeys) {
+            changesMade = true;
+            tableInCatalog.primaryKeys = newPrimaryKeys;
+            tableInCatalog.foreignKeys = newForeignKeys;
+            addLog(`[CatalogStore-UpdateKeysSQL] Updated PK/FK summary strings for table ${tableInCatalog.name}: PKs: ${tableInCatalog.primaryKeys}, FKs: ${tableInCatalog.foreignKeys}`);
+          }
       }
   });
   
   if (changesMade) {
-    console.log(`[CatalogStore-UpdateKeysSQL] Successfully updated key information for dataset ${datasetName} (table: ${targetTableName || 'all relevant tables'}).`);
+    addLog(`[CatalogStore-UpdateKeysSQL] Successfully updated key information. Changes were made.`);
   } else {
-    console.log(`[CatalogStore-UpdateKeysSQL] No changes made to key information for dataset ${datasetName} (table: ${targetTableName || 'all relevant tables'}). This might be because no keys were found or matched existing raw data.`);
+    addLog(`[CatalogStore-UpdateKeysSQL] No changes made to key information. This might be because no keys were found or matched existing raw data flags.`);
   }
   return changesMade;
 }

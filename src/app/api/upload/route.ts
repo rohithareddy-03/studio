@@ -1,9 +1,9 @@
-
 // src/app/api/upload/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
 import { initializeCatalog, storeRawDataForEnrichment } from '@/lib/catalog-store';
 import type { RawDataset, RawTable, RawColumn } from '@/types';
+import { addLog } from '@/lib/log-store'; // Import addLog
 
 // Define required headers for each sheet (Canonical Casing for internal reference, matching logic is case-insensitive)
 const REQUIRED_DATASET_HEADERS = ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location'];
@@ -25,11 +25,6 @@ const ALL_COLUMN_KEYS: (keyof RawColumn)[] = ['TABLE_NAME', 'COLUMN_NAME', 'DATA
 
 function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName: string): string | null {
   if (!sheetData || sheetData.length === 0) {
-    // If sheetData is empty (e.g., sheet exists but has no rows, or only header row which sheet_to_json might return as empty array),
-    // we can't validate headers based on sheetData[0]. This case should be handled by checking if the sheet itself exists.
-    // If it exists but is empty, it's not a header validation issue per se, but a lack of data.
-    // Let's assume if sheetData is truly empty [], it's okay from a header perspective if data rows are optional.
-    // However, for 'datasets', we require at least one data row.
     return null; 
   }
   const actualHeaders = Object.keys(sheetData[0]).map(h => h.toLowerCase());
@@ -38,7 +33,6 @@ function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName:
   const missingHeaders = requiredHeadersLower.filter(reqHeader => !actualHeaders.includes(reqHeader));
   
   if (missingHeaders.length > 0) {
-    // Find original casing for error message
     const originalCaseMissingHeaders = requiredHeaders.filter(rh => missingHeaders.includes(rh.toLowerCase()));
     return `Sheet '${sheetName}' is missing required columns (case-insensitive check): ${originalCaseMissingHeaders.join(', ')}. Please ensure all required headers are present.`;
   }
@@ -51,14 +45,11 @@ function transformToCanonical<T extends object>(parsedData: any[], allCanonicalK
     const excelKeys = Object.keys(obj);
 
     for (const canonicalKey of allCanonicalKeys) {
-      // Find the Excel key that matches the canonical key case-insensitively
       const excelKeyFound = excelKeys.find(ek => ek.toLowerCase() === (canonicalKey as string).toLowerCase());
       if (excelKeyFound) {
         (newObj as any)[canonicalKey] = obj[excelKeyFound];
       } else {
-        // If a canonical key is not found in Excel data (e.g., an optional column was entirely missing from the sheet),
-        // it remains undefined/omitted in newObj. This is generally fine for optional fields.
-        // Zod schemas and types should handle optionality.
+        // If canonicalKey is not found, it remains undefined in newObj, which is fine for optional fields.
       }
     }
     return newObj as T;
@@ -67,14 +58,18 @@ function transformToCanonical<T extends object>(parsedData: any[], allCanonicalK
 
 export async function POST(request: NextRequest) {
   try {
+    addLog("Upload API: Received new file upload request.");
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 
     if (!file) {
+      addLog("Upload API Error: No file uploaded.");
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
+    addLog(`Upload API: Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes.`);
 
     if (file.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      addLog(`Upload API Error: Invalid file type: ${file.type}.`);
       return NextResponse.json({ error: 'Invalid file type. Only .xlsx is allowed.' }, { status: 400 });
     }
 
@@ -86,47 +81,48 @@ export async function POST(request: NextRequest) {
     const columnsSheet = workbook.Sheets['columns'];
 
     if (!datasetsSheet) {
+      addLog("Upload API Error: Missing required sheet: 'datasets'.");
       return NextResponse.json({ error: "Missing required sheet: 'datasets'." }, { status: 400 });
-    }
-    if (!tablesSheet) {
-      // Allow tables sheet to be optional or empty
-      // return NextResponse.json({ error: "Missing required sheet: 'tables'." }, { status: 400 });
-    }
-    if (!columnsSheet) {
-      // Allow columns sheet to be optional or empty
-      // return NextResponse.json({ error: "Missing required sheet: 'columns'." }, { status: 400 });
     }
     
     const parsedDatasets: any[] = XLSX.utils.sheet_to_json(datasetsSheet, { defval: null });
     const parsedTables: any[] = tablesSheet ? XLSX.utils.sheet_to_json(tablesSheet, { defval: null }) : [];
     const parsedColumns: any[] = columnsSheet ? XLSX.utils.sheet_to_json(columnsSheet, { defval: null }) : [];
     
+    addLog(`Upload API: Parsed datasets: ${parsedDatasets.length}, tables: ${parsedTables.length}, columns: ${parsedColumns.length}`);
+
     let validationError;
 
     if (parsedDatasets.length === 0) {
+        addLog("Upload API Error: Sheet 'datasets' is empty or has no data rows.");
         return NextResponse.json({ error: 'Sheet \'datasets\' is empty or has no data. It must contain headers and at least one dataset.' }, { status: 400 });
     }
     validationError = validateHeaders(parsedDatasets, REQUIRED_DATASET_HEADERS, 'datasets');
-    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    if (validationError) {
+      addLog(`Upload API Error: Header validation failed for 'datasets': ${validationError}`);
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
     
-    // Validate headers for tables and columns only if they have data rows.
-    // parsedX.length > 0 implies there's at least one row of data (or a row of nulls if headers only).
-    // Object.values(parsedX[0]).some(v => v !== null) checks if the first row isn't just all nulls.
     if (parsedTables.length > 0 && (parsedTables[0] && Object.values(parsedTables[0]).some(v => v !== null))) {
         validationError = validateHeaders(parsedTables, REQUIRED_TABLE_HEADERS, 'tables');
-        if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+        if (validationError) {
+          addLog(`Upload API Error: Header validation failed for 'tables': ${validationError}`);
+          return NextResponse.json({ error: validationError }, { status: 400 });
+        }
     }
 
     if (parsedColumns.length > 0 && (parsedColumns[0] && Object.values(parsedColumns[0]).some(v => v !== null))) {
         validationError = validateHeaders(parsedColumns, REQUIRED_COLUMN_HEADERS, 'columns');
-        if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+        if (validationError) {
+          addLog(`Upload API Error: Header validation failed for 'columns': ${validationError}`);
+          return NextResponse.json({ error: validationError }, { status: 400 });
+        }
     }
     
-    // Ensure the first dataset has a name.
     const firstDatasetRaw = parsedDatasets[0];
-    // Find the key for 'Dataset_name' case-insensitively
     const datasetNameKeyInRaw = Object.keys(firstDatasetRaw).find(k => k.toLowerCase() === 'dataset_name');
-    if (!datasetNameKeyInRaw || firstDatasetRaw[datasetNameKeyInRaw] === null || firstDatasetRaw[datasetNameKeyInRaw] === '') {
+    if (!datasetNameKeyInRaw || firstDatasetRaw[datasetNameKeyInRaw] === null || String(firstDatasetRaw[datasetNameKeyInRaw]).trim() === '') {
+      addLog("Upload API Error: The first dataset in 'datasets' sheet must have a valid 'Dataset_name'.");
       return NextResponse.json({ error: 'The first dataset in the "datasets" sheet must have a valid "Dataset_name".' }, { status: 400 });
     }
 
@@ -134,46 +130,46 @@ export async function POST(request: NextRequest) {
     const rawTables: RawTable[] = transformToCanonical<RawTable>(parsedTables, ALL_TABLE_KEYS);
     const rawColumns: RawColumn[] = transformToCanonical<RawColumn>(parsedColumns, ALL_COLUMN_KEYS);
 
-    storeRawDataForEnrichment({ // This stores the canonically cased raw data
+    addLog("Upload API: Storing raw data for potential enrichment and initializing catalog...");
+    storeRawDataForEnrichment({ 
       datasets: rawDatasets,
       tables: rawTables,
       columns: rawColumns,
     });
 
     const enrichedCatalog = await initializeCatalog(rawDatasets, rawTables, rawColumns);
+    addLog("Upload API: Catalog initialization complete.");
 
-    // --- Diagnostic Start ---
     try {
-      // Attempt to stringify to check for serialization issues BEFORE NextResponse.json does.
       JSON.stringify(enrichedCatalog); 
     } catch (e: any) {
-      console.error("Critical Error: Enriched catalog data is not serializable.", e.message, e.stack);
-      // If stringify fails, this is a strong candidate for the root cause.
+      addLog(`Upload API Critical Error: Enriched catalog data is not serializable. Error: ${e.message}`);
+      console.error("Upload API Critical Error: Enriched catalog data is not serializable.", e.message, e.stack);
       return NextResponse.json({ error: "Internal error: Catalog data could not be processed for the response." }, { status: 500 });
     }
-    // --- Diagnostic End ---
 
-    return NextResponse.json({ message: 'File uploaded and metadata enriched successfully', catalog: enrichedCatalog }, { status: 200 });
+    addLog("Upload API: File uploaded and catalog processed successfully. Returning response.");
+    return NextResponse.json({ message: 'File uploaded and catalog processed successfully.', catalog: enrichedCatalog }, { status: 200 });
 
   } catch (error: any) {
-    console.error('Upload API Error:', error); // Log the full error object
+    addLog(`Upload API Error: An unexpected error occurred. Error: ${error.message}`);
+    console.error('Upload API Error:', error); 
     let simpleErrorMessage = 'An unexpected error occurred during file upload.';
 
     if (error && typeof error.message === 'string') {
-      simpleErrorMessage = error.message.substring(0, 500); // Truncate to avoid overly long messages
+      simpleErrorMessage = error.message.substring(0, 500); 
     } else if (typeof error === 'string') {
-      simpleErrorMessage = error.substring(0, 500); // Truncate
+      simpleErrorMessage = error.substring(0, 500); 
     }
     
-    // Log more details if it's a complex object but not a standard Error instance
     if (error && typeof error === 'object' && !(error instanceof Error)) {
         try {
-            console.error('Full error object (non-Error instance):', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+            console.error('Upload API Full error object (non-Error instance):', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
         } catch (e) {
-            console.error('Could not stringify the full error object.');
+            console.error('Upload API: Could not stringify the full error object.');
         }
     } else if (error instanceof Error && error.stack) {
-        console.error('Error stack:', error.stack);
+        console.error('Upload API Error stack:', error.stack);
     }
 
     return NextResponse.json({ error: simpleErrorMessage }, { status: 500 });
