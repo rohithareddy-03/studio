@@ -9,109 +9,109 @@ body {
 
 @layer base {
   :root {
-    /* Sleek, Modern, Futuristic, White-Space Heavy, Swiss Design Inspired Theme */
-    --background: 0 0% 100%; /* Pure White */
-    --foreground: 220 10% 15%; /* Very Dark Desaturated Blue/Gray for text */
+    /* Cyber Clear Theme - Futuristic, Clean, Vibrant Accents */
+    --background: 220 60% 98%; /* Very light, cool gray-blue */
+    --foreground: 220 15% 25%; /* Dark, desaturated blue for text */
 
-    --card: 0 0% 100%; /* White cards */
-    --card-foreground: 220 10% 15%;
+    --card: 220 30% 99%; /* Almost white, very subtle blue tint for cards */
+    --card-foreground: 220 15% 28%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 10% 15%;
+    --popover: 220 30% 99%;
+    --popover-foreground: 220 15% 28%;
 
-    --primary: 210 100% 56%; /* A clear, modern blue for primary actions/selection */
-    --primary-foreground: 0 0% 100%; /* White text on primary */
+    --primary: 200 90% 50%; /* Vibrant, clear Cyan/Teal */
+    --primary-foreground: 220 60% 99%; /* Light text on primary */
 
-    --secondary: 220 20% 96%; /* Very light gray for subtle backgrounds, panel divisions */
-    --secondary-foreground: 220 10% 25%; /* Darker gray for text on secondary backgrounds */
+    --secondary: 220 25% 94%; /* Light gray-blue for secondary elements, panel divisions */
+    --secondary-foreground: 220 15% 35%; /* Darker gray for text on secondary */
 
-    --muted: 220 15% 92%; /* Light Gray/Blue tint for less important text or elements */
-    --muted-foreground: 220 10% 45%; /* Medium Gray/Blue */
+    --muted: 220 20% 90%; /* Muted cool gray for less important text/elements */
+    --muted-foreground: 220 10% 55%; /* Medium Gray/Blue */
 
-    --accent: 200 80% 55%; /* A slightly softer, modern teal/blue accent */
+    --accent: 260 90% 65%; /* A futuristic purple/violet accent */
     --accent-foreground: 0 0% 100%; 
     
-    --destructive: 0 84% 60%; /* Vibrant Red */
+    --destructive: 0 75% 55%; /* Clear Red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 90%; /* Very subtle light gray border */
-    --input: 220 15% 90%; /* Input border color */
-    --ring: 210 100% 65%; /* Ring color (primary variant) */
+    --border: 220 20% 88%; /* Subtle cool gray border */
+    --input: 220 20% 88%; /* Input border color */
+    --ring: 200 85% 55%; /* Ring color (primary variant) */
 
-    --chart-1: 210 100% 50%;
-    --chart-2: 170 80% 45%;
-    --chart-3: 30 90% 55%;
-    --chart-4: 280 70% 60%;
-    --chart-5: 0 70% 65%;
+    --chart-1: 200 80% 50%;
+    --chart-2: 260 70% 60%;
+    --chart-3: 30 90% 60%;
+    --chart-4: 170 70% 50%;
+    --chart-5: 320 70% 65%;
     
-    --radius: 0.3rem; /* Slightly sharper corners */
+    --radius: 0.5rem; /* Slightly more rounded for a softer modern feel */
 
     /* Sidebar specific colors - aim for consistency or subtle differentiation */
-    --sidebar-background: 0 0% 98%; /* Almost white, slightly off-white for depth */
-    --sidebar-foreground: 220 10% 15%;
-    --sidebar-primary: 210 100% 56%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 200 80% 55%;
+    --sidebar-background: 220 50% 96%; 
+    --sidebar-foreground: 220 15% 25%;
+    --sidebar-primary: 200 90% 50%;
+    --sidebar-primary-foreground: 220 60% 99%;
+    --sidebar-accent: 260 90% 65%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 15% 88%; /* Subtle border for sidebar elements */
-    --sidebar-ring: 200 80% 55%;
+    --sidebar-border: 220 20% 85%; 
+    --sidebar-ring: 200 85% 55%;
 
     /* Sensitivity colors - ensure good contrast and modern feel */
-    --sensitivity-low: 120 60% 45%; /* Green */
-    --sensitivity-medium: 40 90% 55%; /* Orange/Yellow */
-    --sensitivity-high: 0 80% 60%; /* Red */
-    --sensitivity-unknown: 220 10% 60%; /* Gray */
+    --sensitivity-low: 140 60% 50%; /* Vibrant Green */
+    --sensitivity-medium: 45 90% 55%; /* Bright Orange/Yellow */
+    --sensitivity-high: 0 85% 60%; /* Strong Red */
+    --sensitivity-unknown: 220 10% 70%; /* Neutral Gray */
   }
 
   .dark {
-    /* Dark Theme Adaptation - Prioritize contrast and readability */
-    --background: 220 20% 10%; /* Very Dark Blue/Gray */
-    --foreground: 220 15% 90%; /* Light Gray/Blue text */
+    /* Dark Cyber Clear Theme */
+    --background: 220 20% 10%; 
+    --foreground: 220 25% 90%; 
 
-    --card: 220 20% 13%; /* Slightly lighter than background for card depth */
-    --card-foreground: 220 15% 90%;
+    --card: 220 22% 14%; /* Slightly lighter than background */
+    --card-foreground: 220 25% 88%;
 
-    --popover: 220 20% 10%;
-    --popover-foreground: 220 15% 90%;
+    --popover: 220 20% 12%;
+    --popover-foreground: 220 25% 90%;
 
-    --primary: 210 100% 60%; /* Brighter blue for dark mode */
-    --primary-foreground: 220 20% 10%; 
+    --primary: 200 85% 55%; /* Brighter Cyan/Teal for dark mode */
+    --primary-foreground: 220 15% 15%; 
 
-    --secondary: 220 20% 18%; /* Darker secondary for panel divisions */
-    --secondary-foreground: 220 15% 85%;
+    --secondary: 220 20% 18%; 
+    --secondary-foreground: 220 20% 80%;
 
-    --muted: 220 20% 15%;
+    --muted: 220 18% 25%;
     --muted-foreground: 220 15% 65%;
 
-    --accent: 200 80% 60%; /* Brighter accent for dark mode */
-    --accent-foreground: 220 20% 5%;
+    --accent: 260 85% 70%; /* Brighter violet for dark mode */
+    --accent-foreground: 220 20% 10%;
 
-    --destructive: 0 70% 55%;
+    --destructive: 0 70% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 25%; /* More visible border in dark mode */
-    --input: 220 15% 25%; 
-    --ring: 210 100% 70%;
+    --border: 220 15% 30%; 
+    --input: 220 15% 30%; 
+    --ring: 200 80% 60%;
 
-    --chart-1: 210 90% 60%;
-    --chart-2: 170 70% 50%;
-    --chart-3: 30 80% 60%;
-    --chart-4: 280 60% 65%;
-    --chart-5: 0 60% 70%;
+    --chart-1: 200 75% 55%;
+    --chart-2: 260 65% 65%;
+    --chart-3: 30 85% 65%;
+    --chart-4: 170 65% 55%;
+    --chart-5: 320 65% 70%;
 
-    --sidebar-background: 220 20% 8%; /* Even darker for sidebar */
-    --sidebar-foreground: 220 15% 88%;
-    --sidebar-primary: 210 100% 60%;
-    --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 200 80% 60%;
-    --sidebar-accent-foreground: 220 20% 5%;
-    --sidebar-border: 220 15% 20%;
+    --sidebar-background: 220 20% 9%; 
+    --sidebar-foreground: 220 25% 88%;
+    --sidebar-primary: 200 85% 55%;
+    --sidebar-primary-foreground: 220 15% 15%;
+    --sidebar-accent: 260 85% 70%;
+    --sidebar-accent-foreground: 220 20% 10%;
+    --sidebar-border: 220 15% 25%;
     --sidebar-ring: 200 80% 60%;
 
-    --sensitivity-low: 120 50% 55%;
-    --sensitivity-medium: 40 80% 60%;
-    --sensitivity-high: 0 70% 65%;
-    --sensitivity-unknown: 220 10% 55%;
+    --sensitivity-low: 140 55% 60%;
+    --sensitivity-medium: 45 85% 60%;
+    --sensitivity-high: 0 80% 65%;
+    --sensitivity-unknown: 220 10% 50%;
   }
 }
 
@@ -122,5 +122,15 @@ body {
   body {
     @apply bg-background text-foreground;
     min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }

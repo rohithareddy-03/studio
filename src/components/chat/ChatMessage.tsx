@@ -4,8 +4,8 @@
 
 import type { ChatMessage as ChatMessageType } from '@/types';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, User } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; // Added AvatarImage
+import { Bot, User, BrainCircuit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -17,18 +17,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.sender === 'user';
 
   return (
-    <div className={cn("flex items-start gap-3 py-3 my-2", isUser ? "justify-end pl-8 sm:pl-12" : "pr-8 sm:pr-12")}> {/* Added my-2 and pl/pr for width constraint */}
+    <div className={cn("flex items-end gap-2.5 py-3 my-2.5", isUser ? "justify-end pl-10 sm:pl-16" : "pr-10 sm:pr-16")}>
       {!isUser && (
-        <Avatar className="h-8 w-8 border border-primary/50 shrink-0"> 
-          <AvatarFallback><Bot size={18} className="text-primary" /></AvatarFallback>
+        <Avatar className="h-9 w-9 border-2 border-primary/30 shrink-0 bg-primary/10"> 
+          <AvatarFallback className="bg-transparent"><BrainCircuit size={20} className="text-primary" /></AvatarFallback>
         </Avatar>
       )}
       <div
         className={cn(
-          "max-w-[80%] rounded-lg p-3 text-sm", // Adjusted max-w, base text size
+          "max-w-[75%] rounded-xl p-3.5 text-sm shadow-md", 
           isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-secondary text-secondary-foreground border border-border" 
+            ? "bg-primary text-primary-foreground rounded-br-none"
+            : "bg-card text-card-foreground border border-border/50 rounded-bl-none" 
         )}
       >
         <ReactMarkdown
@@ -37,40 +37,46 @@ export function ChatMessage({ message }: ChatMessageProps) {
             code({ node, inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || '');
               return !inline && match ? (
-                <pre className="bg-muted/50 p-2.5 rounded-md overflow-x-auto my-2 text-sm"> {/* Slightly more padding */}
+                <pre className="bg-muted/60 p-3 rounded-md overflow-x-auto my-2.5 text-xs font-mono border border-border/50">
                   <code className={className} {...props}>
                     {String(children).replace(/\n$/, '')}
                   </code>
                 </pre>
               ) : (
-                <code className={cn(className, "bg-muted/50 px-1 py-0.5 rounded text-sm")} {...props}>
+                <code className={cn(className, "bg-muted/60 px-1.5 py-0.5 rounded text-xs font-mono")} {...props}>
                   {children}
                 </code>
               );
             },
             p({children}) {
-              return <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p> // Adjusted spacing and leading
+              return <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p> 
             },
             ul({children}) {
-              return <ul className="list-disc list-inside pl-4 my-1.5 space-y-0.5">{children}</ul> // Adjusted spacing
+              return <ul className="list-disc list-inside pl-3 my-2 space-y-1">{children}</ul> 
             },
             ol({children}) {
-              return <ol className="list-decimal list-inside pl-4 my-1.5 space-y-0.5">{children}</ol> // Adjusted spacing
+              return <ol className="list-decimal list-inside pl-3 my-2 space-y-1">{children}</ol> 
             },
             li({children}) {
-              return <li className="mb-0.5">{children}</li> // Adjusted spacing
+              return <li className="mb-0.5">{children}</li> 
+            },
+            strong({children}) {
+              return <strong className="font-semibold">{children}</strong>
+            },
+            a({children, href}) {
+              return <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">{children}</a>
             }
           }}
         >
           {message.content}
         </ReactMarkdown>
-        <p className={cn("text-xs mt-2 text-right", isUser ? "text-primary-foreground/70" : "text-muted-foreground")}> {/* Adjusted margin-top and alignment */}
+        <p className={cn("text-xs mt-2 text-right opacity-70", isUser ? "text-primary-foreground/80" : "text-muted-foreground")}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </p>
       </div>
       {isUser && (
-        <Avatar className="h-8 w-8 border border-border shrink-0">
-          <AvatarFallback><User size={18} /></AvatarFallback>
+        <Avatar className="h-9 w-9 border-2 border-border/50 shrink-0 bg-secondary">
+          <AvatarFallback className="bg-transparent"><User size={18} className="text-foreground/70" /></AvatarFallback>
         </Avatar>
       )}
     </div>

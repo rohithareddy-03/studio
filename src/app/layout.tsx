@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'DataSage Chat',
-  description: 'AI-Powered Data Catalog Assistant with Metadata Enrichment',
+  title: 'DataSage - CyberClear Edition',
+  description: 'AI-Powered Data Catalog with a Futuristic Interface',
 };
 
 export default function RootLayout({
@@ -31,7 +31,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen bg-background`}>
         <CatalogProvider>
           <Navbar />
-          <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-6"> {/* Reduced vertical padding */}
+          <main className="flex-grow container mx-auto px-4 py-8 sm:px-6 lg:px-8"> {/* Increased py */}
             {children}
           </main>
           <Toaster />
