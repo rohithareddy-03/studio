@@ -21,7 +21,7 @@ interface CatalogContextType {
   selectTable: (tableId: string | null) => void;
   sendMessage: (message: string) => Promise<void>;
   reEnrich: () => Promise<void>;
-  updateMetadataField: (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => void;
+  updateMetadataField: (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => Promise<void>;
 }
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
@@ -65,12 +65,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       const ds = catalog.datasets.find(d => d.id === currentSelectedDatasetId);
       setSelectedDataset(ds || null);
       if (!ds) { 
-        setCurrentSelectedTableId(null); // Also clear table selection if dataset is gone
+        setCurrentSelectedTableId(null); 
         setSelectedTable(null);
       }
     } else {
       setSelectedDataset(null);
-      // If there's no catalog or no dataset ID, clear table selection too
       if (!currentSelectedDatasetId) {
          setCurrentSelectedTableId(null);
          setSelectedTable(null);
@@ -83,7 +82,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       const table = selectedDataset.tables.find(t => t.id === currentSelectedTableId);
       setSelectedTable(table || null);
     } else {
-      setSelectedTable(null); // Clear selected table if dataset changes or tableId is null
+      setSelectedTable(null); 
     }
   }, [selectedDataset, currentSelectedTableId]);
 
@@ -91,20 +90,17 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const selectDataset = useCallback((datasetName: string | null) => {
     if (!datasetName) {
       setCurrentSelectedDatasetId(null);
-      setCurrentSelectedTableId(null); // Also reset table ID
-      // setChatMessages([]); // Keep chat messages or clear based on desired UX
+      setCurrentSelectedTableId(null); 
       return;
     }
     const ds = catalog?.datasets.find(d => d.name === datasetName);
     if (ds) {
       setCurrentSelectedDatasetId(ds.id);
-      setCurrentSelectedTableId(null); // Reset table selection when a new dataset is chosen
+      setCurrentSelectedTableId(null); 
       setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: **${ds.name}**. I am DataSage, your specialized AI assistant for this data catalog. How can I help you explore this dataset?`, timestamp: new Date() }]);
     } else {
-      // If dataset not found (e.g., after a catalog refresh where it might be removed)
       setCurrentSelectedDatasetId(null);
       setCurrentSelectedTableId(null);
-       // setChatMessages([]);
     }
   }, [catalog]); 
 
@@ -125,7 +121,13 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'File upload failed');
       }
-      await fetchCatalog(); // Refetch catalog to get the latest data
+      const data = await response.json();
+      setCatalog(data.catalog); // Directly set catalog from successful upload response
+      setCurrentSelectedDatasetId(null); // Reset selections
+      setCurrentSelectedTableId(null);
+      setSelectedDataset(null);
+      setSelectedTable(null);
+      setChatMessages([]);
       toast({ title: "Success", description: "File uploaded and metadata enriched." });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -145,7 +147,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Metadata re-enrichment failed. This could be due to an AI processing error or no initial data being available for enrichment.');
       }
-      await fetchCatalog(); // Refetch catalog to get the latest data
+      const data = await response.json();
+      setCatalog(data.catalog); // Update catalog with re-enriched data
+      setCurrentSelectedDatasetId(null); 
+      setCurrentSelectedTableId(null);
+      setSelectedDataset(null);
+      setSelectedTable(null);
       toast({ title: "Success", description: "Metadata re-enriched successfully." });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -200,39 +207,66 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateMetadataField = (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => {
+  const updateMetadataField = async (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => {
+    // 1. Optimistically update client-side catalog
+    let itemType: 'dataset' | 'table' | 'column' | null = null;
+    const parts = itemId.split('/');
+    if (parts.length === 1) itemType = 'dataset';
+    else if (parts.length === 2) itemType = 'table';
+    else if (parts.length === 3) itemType = 'column';
+
     setCatalog(currentCatalog => {
       if (!currentCatalog) return null;
-
-      const newCatalog = JSON.parse(JSON.stringify(currentCatalog)) as CatalogData; // Deep copy for immutability
+      const newCatalog = JSON.parse(JSON.stringify(currentCatalog)) as CatalogData; 
 
       for (const dataset of newCatalog.datasets) {
-        if (dataset.id === itemId) {
+        if (dataset.id === itemId && itemType === 'dataset') {
           if (fieldKey === 'description') dataset.description = newValue;
-          if (fieldKey === 'tags') dataset.tags = newValue;
+          else if (fieldKey === 'tags') dataset.tags = newValue;
           return newCatalog;
         }
         for (const table of dataset.tables) {
-          if (table.id === itemId) {
+          if (table.id === itemId && itemType === 'table') {
             if (fieldKey === 'description') table.description = newValue;
-            if (fieldKey === 'tags') table.tags = newValue;
+            else if (fieldKey === 'tags') table.tags = newValue;
             return newCatalog;
           }
           for (const column of table.columns) {
-            if (column.id === itemId) {
+            if (column.id === itemId && itemType === 'column') {
               if (fieldKey === 'description') column.description = newValue;
-              if (fieldKey === 'tags') column.tags = newValue;
+              else if (fieldKey === 'tags') column.tags = newValue;
               return newCatalog;
             }
           }
         }
       }
-      // If no item was found (should not happen if itemId is correct)
-      console.warn(`[CatalogProvider] updateMetadataField: Item with ID ${itemId} not found.`);
-      return currentCatalog; // Return original catalog if item not found
+      console.warn(`[CatalogProvider] updateMetadataField (client): Item with ID ${itemId} not found for optimistic update.`);
+      return currentCatalog; 
     });
-    // Optionally, add a toast notification for successful update
-    // toast({ title: "Metadata Updated", description: `Field ${fieldKey} for item ${itemId} updated.`});
+
+    // 2. Call API to update server-side rawDataForEnrichment
+    try {
+      const response = await fetch('/api/catalog/update-raw-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, fieldKey, newValue }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        // Attempt to revert optimistic update if server save fails
+        fetchCatalog(); // Refetch to get consistent state
+        toast({ title: "Save Error", description: `Server failed to save: ${errorData.error || 'Unknown server error'}. Client changes reverted.`, variant: "destructive" });
+        return; // Important to stop here
+      }
+      toast({ title: "Metadata Saved", description: `Changes to ${fieldKey} for item ${parts.pop()} saved.`});
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred while saving metadata.';
+      // Attempt to revert optimistic update if server save fails
+      fetchCatalog(); // Refetch to get consistent state
+      toast({ title: "Save Error", description: `${errorMessage}. Client changes reverted.`, variant: "destructive" });
+      console.error("[CatalogProvider] Failed to save metadata update to server:", err);
+    }
   };
 
 
@@ -265,3 +299,4 @@ export function useCatalog() {
   }
   return context;
 }
+
