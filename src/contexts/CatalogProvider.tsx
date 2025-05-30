@@ -1,3 +1,4 @@
+
 // src/contexts/CatalogProvider.tsx
 "use client";
 
@@ -33,6 +34,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const { toast } = useToast();
 
+  const [currentSelectedDatasetId, setCurrentSelectedDatasetId] = useState<string | null>(null);
+  const [currentSelectedTableId, setCurrentSelectedTableId] = useState<string | null>(null);
+
   const fetchCatalog = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -41,32 +45,75 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error('Failed to fetch catalog');
       const data: CatalogData = await response.json();
       setCatalog(data);
-      
-      if (selectedDataset && data.datasets) {
-        const refreshedSelectedDataset = data.datasets.find(d => d.name === selectedDataset.name);
-        setSelectedDataset(refreshedSelectedDataset || null);
-        if (refreshedSelectedDataset && selectedTable) {
-            const refreshedSelectedTable = refreshedSelectedDataset.tables.find(t => t.id === selectedTable.id);
-            setSelectedTable(refreshedSelectedTable || null);
-        } else if (!refreshedSelectedDataset) {
-            setSelectedTable(null);
-        }
-      } else {
-        setSelectedDataset(null);
-        setSelectedTable(null);
-      }
-
+      // selectedDataset and selectedTable will be updated by the useEffects below
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      toast({ title: "Error", description: "Failed to fetch catalog data.", variant: "destructive" });
+      const newError = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(newError);
+      toast({ title: "Error", description: "Failed to fetch catalog data: " + newError, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [toast, selectedDataset, selectedTable]);
+  }, [toast]); // fetchCatalog callback dependency is now stable
 
-  useEffect(() => {
+  useEffect(() => { // Initial fetch
     fetchCatalog();
   }, [fetchCatalog]);
+
+  // Effect to update selectedDataset object when ID or catalog changes
+  useEffect(() => {
+    if (catalog && currentSelectedDatasetId) {
+      const ds = catalog.datasets.find(d => d.id === currentSelectedDatasetId);
+      setSelectedDataset(ds || null);
+      if (!ds) { // If dataset is no longer found (e.g., after a catalog refresh where it's deleted)
+        setCurrentSelectedTableId(null); // Also clear selected table ID
+        setSelectedTable(null);
+      }
+    } else {
+      setSelectedDataset(null);
+      // If no dataset is selected (or catalog is null), ensure selected table is also null
+      if (!currentSelectedDatasetId) {
+        setCurrentSelectedTableId(null);
+        setSelectedTable(null);
+      }
+    }
+  }, [catalog, currentSelectedDatasetId]);
+
+  // Effect to update selectedTable object when its ID or the parent selectedDataset changes
+  useEffect(() => {
+    if (selectedDataset && currentSelectedTableId) {
+      const table = selectedDataset.tables.find(t => t.id === currentSelectedTableId);
+      setSelectedTable(table || null);
+    } else {
+      setSelectedTable(null); // Clear table if no parent dataset or no table ID
+    }
+  }, [selectedDataset, currentSelectedTableId]);
+
+
+  const selectDataset = useCallback((datasetName: string | null) => {
+    if (!datasetName) {
+      setCurrentSelectedDatasetId(null);
+      setCurrentSelectedTableId(null);
+      setChatMessages([]);
+      return;
+    }
+    // Find by name to get ID, as name is what's usually passed from UI elements
+    const ds = catalog?.datasets.find(d => d.name === datasetName);
+    if (ds) {
+      setCurrentSelectedDatasetId(ds.id);
+      setCurrentSelectedTableId(null); // Clear selected table when dataset changes
+      setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: ${ds.name}. How can I help you?`, timestamp: new Date() }]);
+    } else {
+      // Dataset name not found in current catalog
+      setCurrentSelectedDatasetId(null);
+      setCurrentSelectedTableId(null);
+      setChatMessages([]);
+    }
+  }, [catalog]); // Depends on catalog to find dataset by name
+
+  const selectTable = useCallback((tableId: string | null) => {
+    setCurrentSelectedTableId(tableId);
+  }, []);
+
 
   const uploadFile = async (file: File) => {
     setIsLoading(true);
@@ -80,11 +127,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'File upload failed');
       }
-      await fetchCatalog(); 
+      await fetchCatalog();
       toast({ title: "Success", description: "File uploaded and metadata enriched." });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      toast({ title: "Error", description: err instanceof Error ? err.message : "File upload failed.", variant: "destructive" });
+      const newError = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(newError);
+      toast({ title: "Error", description: newError, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -99,39 +147,15 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Metadata re-enrichment failed');
       }
-      await fetchCatalog(); 
+      await fetchCatalog();
       toast({ title: "Success", description: "Metadata re-enriched successfully." });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Metadata re-enrichment failed.", variant: "destructive" });
+      const newError = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(newError);
+      toast({ title: "Error", description: newError, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const selectDataset = (datasetName: string | null) => {
-    if (!datasetName) {
-      setSelectedDataset(null);
-      setSelectedTable(null);
-      setChatMessages([]); 
-      return;
-    }
-    const ds = catalog?.datasets.find(d => d.name === datasetName) || null;
-    setSelectedDataset(ds);
-    setSelectedTable(null); // Clear selected table when dataset changes
-    setChatMessages([]); 
-    if (ds) {
-       setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: ${ds.name}. How can I help you?`, timestamp: new Date() }]);
-    }
-  };
-
-  const selectTable = (tableId: string | null) => {
-    if (!tableId || !selectedDataset) {
-        setSelectedTable(null);
-        return;
-    }
-    const table = selectedDataset.tables.find(t => t.id === tableId) || null;
-    setSelectedTable(table);
   };
 
   const sendMessage = async (message: string) => {
