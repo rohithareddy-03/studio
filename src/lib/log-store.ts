@@ -8,8 +8,10 @@ export function addLog(message: string): void {
     return;
   }
   try {
+    // Log to the actual server console as well for immediate visibility there
+    console.log(`LOG_STORE_ADD: ${message.substring(0,100)}...`); 
+    
     const formattedMessage = `[${new Date().toISOString()}] ${message}`;
-    console.log(`LOG_STORE_ADD: ${message.substring(0,100)}...`); // Actual console log for server terminal
     logs.push({ timestamp: new Date(), message: formattedMessage });
     if (logs.length > MAX_LOG_LINES) {
       logs.shift(); // Remove the oldest log line

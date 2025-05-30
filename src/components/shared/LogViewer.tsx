@@ -26,6 +26,8 @@ interface LogViewerProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const MAX_LOG_LINES_DISPLAY = 100; // Define a constant for display purposes
+
 export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +45,8 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
         throw new Error(errorData.error || `Failed to fetch logs: ${response.statusText}`);
       }
       const data: { logs: LogEntry[] } = await response.json();
-      setLogs(data.logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())); // Show newest first
+      // Sort logs: newest first for display
+      setLogs(data.logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())); 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred while fetching logs.';
       setError(errorMessage);
@@ -52,12 +55,13 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
         description: errorMessage,
         variant: 'destructive',
       });
+      setLogs([]); // Clear logs on error
     } finally {
       setIsLoading(false);
     }
   }, [toast]);
 
-  const clearServerLogs = async () => {
+  const handleClearServerLogs = async () => {
     if (!confirm("Are you sure you want to clear all server-side in-memory logs? This cannot be undone.")) {
       return;
     }
@@ -68,7 +72,7 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to clear logs, server returned non-JSON response' }));
         throw new Error(errorData.error || `Failed to clear server logs: ${response.statusText}`);
       }
-      await response.json();
+      await response.json(); // consume the response
       toast({
         title: 'Server Logs Cleared',
         description: 'In-memory server logs have been cleared.',
@@ -81,6 +85,7 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
             description: errorMessage,
             variant: 'destructive',
         });
+        setError(errorMessage); // Show error in the log viewer as well
     } finally {
         setIsLoading(false);
     }
@@ -93,10 +98,8 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
   }, [isOpen, fetchLogs]);
 
   useEffect(() => {
-    // Scroll to bottom when logs change
+    // Scroll to top when logs change (since newest are first)
     if (scrollAreaRef.current) {
-      // If showing newest first, scroll to top. If oldest first, scroll to bottom.
-      // Assuming logs are sorted newest first for display
       scrollAreaRef.current.scrollTop = 0;
     }
   }, [logs]);
@@ -109,14 +112,14 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
             <ListChecks size={22} /> Server Log Viewer (Recent)
           </DialogTitle>
           <DialogDescription className="text-foreground/80">
-            Showing the last {logs.length} captured server log messages (newest first). This is an in-memory store and resets on server restart.
+            Displaying up to {MAX_LOG_LINES_DISPLAY} most recent server log messages (newest first). This is an in-memory store and resets on server restart.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-grow overflow-hidden relative">
-          <ScrollArea className="h-full w-full p-1 rounded-md border border-input bg-background/50" ref={scrollAreaRef}>
+        <div className="flex-grow overflow-hidden relative border border-input bg-background/50 rounded-md">
+          <ScrollArea className="h-full w-full p-1" ref={scrollAreaRef}>
             {isLoading && logs.length === 0 && (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="flex items-center justify-center h-full text-muted-foreground p-4">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading logs...
               </div>
             )}
@@ -128,14 +131,14 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
               </div>
             )}
             {!isLoading && !error && logs.length === 0 && (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                No logs captured or logs have been cleared.
+              <div className="flex items-center justify-center h-full text-muted-foreground p-4">
+                No logs captured or logs have been cleared. Ensure `addLog()` is used for messages you want to see here.
               </div>
             )}
             {!error && logs.length > 0 && (
-              <pre className="text-xs p-2 whitespace-pre-wrap break-all">
+              <pre className="text-xs p-3 whitespace-pre-wrap break-words">
                 {logs.map((log, index) => (
-                  <div key={index} className={`py-0.5 ${index % 2 === 0 ? 'bg-muted/10' : ''}`}>
+                  <div key={index} className={`py-1 my-0.5 rounded-sm ${index % 2 === 0 ? 'bg-muted/5' : ''}`}>
                      {log.message}
                   </div>
                 ))}
@@ -144,13 +147,18 @@ export function LogViewer({ isOpen, onOpenChange }: LogViewerProps) {
           </ScrollArea>
         </div>
 
-        <DialogFooter className="pt-4 border-t border-border/50">
-          <Button variant="outline" onClick={clearServerLogs} disabled={isLoading} className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/50">
+        <DialogFooter className="pt-4 border-t border-border/50 mt-2">
+          <Button 
+            variant="outline" 
+            onClick={handleClearServerLogs} 
+            disabled={isLoading} 
+            className="text-destructive-foreground bg-destructive hover:bg-destructive/90 border-destructive/50"
+          >
             <Trash2 className="mr-2 h-4 w-4" /> Clear Server Logs
           </Button>
           <div className="flex-grow"></div> {/* Spacer */}
           <Button variant="outline" onClick={fetchLogs} disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {isLoading && logs.length > 0 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Refresh
           </Button>
           <DialogClose asChild>
