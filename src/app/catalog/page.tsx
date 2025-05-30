@@ -39,13 +39,13 @@ const DatasetListItem = ({ dataset, onSelect, isSelected }: { dataset: EnrichedD
 const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: () => void }) => (
  <Card
     onClick={onSelect}
-    className="cursor-pointer hover:shadow-lg hover:border-primary/30 transition-all duration-200 ease-out group bg-card border"
+    className="cursor-pointer hover:shadow-lg hover:border-primary/30 transition-all duration-200 ease-out group bg-card border flex flex-col"
   >
-    <CardHeader className="p-4">
-      <div className="flex items-center justify-between">
+    <CardHeader className="p-4 pb-2">
+      <div className="flex items-start justify-between gap-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2 text-primary group-hover:text-primary/90">
           <Table2 size={18} />
-          {table.name}
+          <span className="truncate" title={table.name}>{table.name}</span>
         </CardTitle>
         <SensitivityBadge level={table.sensitivity} />
       </div>
@@ -53,9 +53,9 @@ const TableListItem = ({ table, onSelect }: { table: EnrichedTable, onSelect: ()
         {table.description || "No description available."}
       </CardDescription>
     </CardHeader>
-    <CardContent className="p-4 pt-1.5 text-xs space-y-1.5 text-muted-foreground">
+    <CardContent className="p-4 pt-2 text-xs space-y-1.5 text-muted-foreground flex-grow">
         <div className="flex items-center gap-1.5"><Rows size={14} /> Rows: <span className="font-medium text-foreground/80">{table.rowCount ?? 'N/A'}</span></div>
-        {table.tags && <div className="flex items-center gap-1.5"><Tag size={14} /> Tags: <span className="font-medium text-foreground/80 truncate">{table.tags}</span></div>}
+        {table.tags && <div className="flex items-center gap-1.5"><Tag size={14} /> Tags: <span className="font-medium text-foreground/80 truncate" title={table.tags}>{table.tags}</span></div>}
     </CardContent>
   </Card>
 );
@@ -93,12 +93,14 @@ const DetailItem = ({ icon: Icon, label, value, className }: { icon?: React.Elem
   }
 
   return (
-    <div className={cn("text-sm flex items-start gap-2.5", className)}> {/* Increased gap slightly */}
-      {Icon && <Icon size={16} className="text-primary/90 mt-[3px] shrink-0" />} {/* Centered icon more with text */}
-      <div className="flex-1 min-w-0"> {/* Allows text block to take space and wrap */}
-        <p className="font-medium text-foreground/70 leading-tight">{label}</p>
-        <p className="text-foreground/90 break-words leading-snug mt-0.5">{String(value)}</p>
-      </div>
+    <div className={cn("text-sm", className)}>
+      <p className="font-medium text-foreground/70 leading-tight flex items-center gap-1.5">
+         {Icon && <Icon size={15} className="text-primary/90 shrink-0" />}
+         {label}
+      </p>
+      <p className="text-foreground/90 break-words leading-snug mt-0.5 ml-[calc(15px+0.375rem)]"> {/* Indent value if icon exists */}
+        {String(value)}
+      </p>
     </div>
   );
 }
