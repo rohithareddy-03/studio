@@ -2,7 +2,8 @@
 'use server';
 
 /**
- * @fileOverview Integrates Gemini with a chat interface to generate SQL queries and dataset summaries.
+ * @fileOverview Integrates Gemini with a chat interface to generate SQL queries and dataset summaries,
+ * maintaining conversation history and strict focus on catalog data.
  *
  * - chatWithGemini - A function that handles the chat interaction with Gemini.
  * - ChatWithGeminiInput - The input type for the chatWithGemini function.
@@ -12,10 +13,17 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'model']),
+  parts: z.array(z.object({text: z.string()})),
+});
+export type ChatMessageHistory = z.infer<typeof ChatMessageSchema>;
+
 const ChatWithGeminiInputSchema = z.object({
-  query: z.string().describe('The user query.'),
+  query: z.string().describe('The user current query.'),
   datasetDescription: z.string().optional().describe('The description of the selected dataset.'),
   tableMetadata: z.string().optional().describe('Metadata about the selected table, as a JSON string.'),
+  history: z.array(ChatMessageSchema).optional().describe('Previous messages in the conversation.'),
 });
 export type ChatWithGeminiInput = z.infer<typeof ChatWithGeminiInputSchema>;
 
@@ -32,21 +40,25 @@ const prompt = ai.definePrompt({
   name: 'chatWithGeminiPrompt',
   input: {schema: ChatWithGeminiInputSchema},
   output: {schema: ChatWithGeminiOutputSchema},
-  prompt: `You are a data science assistant. A data scientist is asking you questions about a dataset.
+  prompt: `You are DataSage, a specialized AI assistant for data catalog exploration.
+Your ONLY purpose is to help users understand and query the provided dataset context.
+You MUST strictly adhere to the following rules:
+1. ONLY answer questions directly related to the dataset description and table metadata provided in the "Dataset Context" section.
+2. If a question is outside this scope (e.g., social chat, general knowledge, harmful, unrelated topics, coding help, or any topic not directly about the provided data catalog information), you MUST politely refuse to answer. State that you are an assistant for data catalog queries only and cannot help with that specific request. Do not attempt to answer it, apologize, or provide any information beyond this refusal.
+3. Use Markdown for all your responses, especially for SQL queries and summaries.
 
-  You have access to the following information about the dataset:
-  {{#if datasetDescription}}
-  Dataset Description: {{{datasetDescription}}}
-  {{/if}}
+Dataset Context:
+{{#if datasetDescription}}
+Dataset Description: {{{datasetDescription}}}
+{{/if}}
 
-  {{#if tableMetadata}}
-  Table Metadata: {{{tableMetadata}}}
-  {{/if}}
+{{#if tableMetadata}}
+Available Table Metadata:
+{{{tableMetadata}}}
+{{/if}}
 
-  Based on this information, answer the following question:
-  {{{query}}}
-
-  If the user asks for a SQL query, generate the SQL query. If the user asks for a dataset summary, generate the summary. Use markdown formatting in your responses.
+User's current question:
+{{{query}}}
   `,
 });
 
@@ -56,8 +68,8 @@ const chatWithGeminiFlow = ai.defineFlow(
     inputSchema: ChatWithGeminiInputSchema,
     outputSchema: ChatWithGeminiOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input) => {
+    const {output} = await prompt(input, {history: input.history});
     return output!;
   }
 );

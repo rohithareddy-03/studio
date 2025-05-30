@@ -2,7 +2,8 @@
 // src/contexts/CatalogProvider.tsx
 "use client";
 
-import type { CatalogData, EnrichedDataset, EnrichedTable, ChatMessage } from '@/types';
+import type { CatalogData, EnrichedDataset, EnrichedTable, ChatMessage as AppChatMessage } from '@/types';
+import type { ChatMessageHistory } from '@/ai/flows/chat-integration-with-gemini'; // Import AI flow's history type
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,7 +13,7 @@ interface CatalogContextType {
   selectedTable: EnrichedTable | null;
   isLoading: boolean;
   error: string | null;
-  chatMessages: ChatMessage[];
+  chatMessages: AppChatMessage[];
   isChatLoading: boolean;
   fetchCatalog: () => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
@@ -30,7 +31,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [selectedTable, setSelectedTable] = useState<EnrichedTable | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<AppChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const { toast } = useToast();
 
@@ -45,7 +46,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error('Failed to fetch catalog');
       const data: CatalogData = await response.json();
       setCatalog(data);
-      // selectedDataset and selectedTable will be updated by the useEffects below
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(newError);
@@ -53,24 +53,22 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]); // fetchCatalog callback dependency is now stable
+  }, [toast]); 
 
-  useEffect(() => { // Initial fetch
+  useEffect(() => { 
     fetchCatalog();
   }, [fetchCatalog]);
 
-  // Effect to update selectedDataset object when ID or catalog changes
   useEffect(() => {
     if (catalog && currentSelectedDatasetId) {
       const ds = catalog.datasets.find(d => d.id === currentSelectedDatasetId);
       setSelectedDataset(ds || null);
-      if (!ds) { // If dataset is no longer found (e.g., after a catalog refresh where it's deleted)
-        setCurrentSelectedTableId(null); // Also clear selected table ID
+      if (!ds) { 
+        setCurrentSelectedTableId(null);
         setSelectedTable(null);
       }
     } else {
       setSelectedDataset(null);
-      // If no dataset is selected (or catalog is null), ensure selected table is also null
       if (!currentSelectedDatasetId) {
         setCurrentSelectedTableId(null);
         setSelectedTable(null);
@@ -78,13 +76,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, [catalog, currentSelectedDatasetId]);
 
-  // Effect to update selectedTable object when its ID or the parent selectedDataset changes
   useEffect(() => {
     if (selectedDataset && currentSelectedTableId) {
       const table = selectedDataset.tables.find(t => t.id === currentSelectedTableId);
       setSelectedTable(table || null);
     } else {
-      setSelectedTable(null); // Clear table if no parent dataset or no table ID
+      setSelectedTable(null); 
     }
   }, [selectedDataset, currentSelectedTableId]);
 
@@ -96,19 +93,17 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setChatMessages([]);
       return;
     }
-    // Find by name to get ID, as name is what's usually passed from UI elements
     const ds = catalog?.datasets.find(d => d.name === datasetName);
     if (ds) {
       setCurrentSelectedDatasetId(ds.id);
-      setCurrentSelectedTableId(null); // Clear selected table when dataset changes
-      setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: ${ds.name}. How can I help you?`, timestamp: new Date() }]);
+      setCurrentSelectedTableId(null); 
+      setChatMessages([{ id: Date.now().toString(), sender: 'ai', content: `Selected dataset: **${ds.name}**. I am DataSage, your specialized AI assistant for this data catalog. How can I help you explore this dataset?`, timestamp: new Date() }]);
     } else {
-      // Dataset name not found in current catalog
       setCurrentSelectedDatasetId(null);
       setCurrentSelectedTableId(null);
       setChatMessages([]);
     }
-  }, [catalog]); // Depends on catalog to find dataset by name
+  }, [catalog]); 
 
   const selectTable = useCallback((tableId: string | null) => {
     setCurrentSelectedTableId(tableId);
@@ -145,7 +140,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/catalog/enrich', { method: 'POST' });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Metadata re-enrichment failed');
+        throw new Error(errorData.error || 'Metadata re-enrichment failed. This could be due to an AI processing error or no initial data being available for enrichment.');
       }
       await fetchCatalog();
       toast({ title: "Success", description: "Metadata re-enriched successfully." });
@@ -164,7 +159,18 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const userMessage: ChatMessage = { id: Date.now().toString(), sender: 'user', content: message, timestamp: new Date() };
+    const userMessage: AppChatMessage = { id: Date.now().toString(), sender: 'user', content: message, timestamp: new Date() };
+    
+    // Prepare history for AI
+    // The AI expects the most recent message (the user's current query) to be part of the main 'query' input, not in the history.
+    // So, we take all messages *except* the latest one if it's the user's first message in this interaction,
+    // or all previous messages for subsequent turns.
+    const historyToPass: ChatMessageHistory[] = chatMessages
+      .map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }],
+      }));
+
     setChatMessages(prev => [...prev, userMessage]);
     setIsChatLoading(true);
 
@@ -172,18 +178,22 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: message, selectedDatasetName: selectedDataset.name }),
+        body: JSON.stringify({ 
+          query: message, 
+          selectedDatasetName: selectedDataset.name,
+          history: historyToPass 
+        }),
       });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to get response from AI');
       }
       const data = await response.json();
-      const aiMessage: ChatMessage = { id: (Date.now() + 1).toString(), sender: 'ai', content: data.response, timestamp: new Date() };
+      const aiMessage: AppChatMessage = { id: (Date.now() + 1).toString(), sender: 'ai', content: data.response, timestamp: new Date() };
       setChatMessages(prev => [...prev, aiMessage]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred with the chat API.';
-      const aiError: ChatMessage = { id: (Date.now() + 1).toString(), sender: 'ai', content: `Error: ${errorMessage}`, timestamp: new Date() };
+      const aiError: AppChatMessage = { id: (Date.now() + 1).toString(), sender: 'ai', content: `Error: ${errorMessage}`, timestamp: new Date() };
       setChatMessages(prev => [...prev, aiError]);
       toast({ title: "Chat Error", description: errorMessage, variant: "destructive" });
     } finally {

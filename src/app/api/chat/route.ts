@@ -1,12 +1,12 @@
 // src/app/api/chat/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { getDatasetByName, getTableMetadata } from '@/lib/catalog-store';
-import { chatWithGemini, type ChatWithGeminiInput } from '@/ai/flows/chat-integration-with-gemini';
+import { chatWithGemini, type ChatWithGeminiInput, type ChatMessageHistory } from '@/ai/flows/chat-integration-with-gemini';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { query, selectedDatasetName } = body;
+    const { query, selectedDatasetName, history } = body;
 
     if (!query || typeof query !== 'string') {
       return NextResponse.json({ error: 'Query is required and must be a string' }, { status: 400 });
@@ -14,6 +14,12 @@ export async function POST(request: NextRequest) {
     if (!selectedDatasetName || typeof selectedDatasetName !== 'string') {
       return NextResponse.json({ error: 'Selected dataset name is required' }, { status: 400 });
     }
+
+    // Validate history if provided
+    if (history && !Array.isArray(history)) {
+        return NextResponse.json({ error: 'History must be an array of chat messages' }, { status: 400 });
+    }
+    // Add more detailed validation for history items if necessary
 
     const dataset = getDatasetByName(selectedDatasetName);
     if (!dataset) {
@@ -23,10 +29,8 @@ export async function POST(request: NextRequest) {
     const chatInput: ChatWithGeminiInput = {
       query: query,
       datasetDescription: dataset.description,
-      // For simplicity, let's provide metadata for all tables in the selected dataset,
-      // or Gemini can be prompted to ask for a specific table if needed.
-      // A more sophisticated approach might parse the query to identify specific table mentions.
       tableMetadata: dataset.tables.map(table => getTableMetadata(dataset.name, table.name)).filter(Boolean).join('\n\n'),
+      history: history as ChatMessageHistory[] || [], // Pass transformed history
     };
     
     const aiResponse = await chatWithGemini(chatInput);
