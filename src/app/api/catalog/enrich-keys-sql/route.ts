@@ -43,13 +43,13 @@ export async function POST(request: NextRequest) {
     const aiInput = { sqlQuery, datasetName, tableName, existingSchemaContext };
     const aiKeyAnalysis: ExtractKeysFromSqlOutput = await extractKeysFromSql(aiInput);
 
-    if (aiKeyAnalysis.warnings && aiKeyAnalysis.warnings.some(w => w.startsWith("Extraction failed:") || w.startsWith("AI returned no output."))) {
+    if (aiKeyAnalysis.warnings && aiKeyAnalysis.warnings.some(w => w.startsWith("Extraction failed:") || w.startsWith("AI returned no output.") || w.startsWith("AI analysis returned no output."))) {
       console.error('AI Key Extraction failed:', aiKeyAnalysis.analysisSummary, aiKeyAnalysis.warnings);
       return NextResponse.json({ 
         error: `AI key extraction failed: ${aiKeyAnalysis.analysisSummary}`,
         summary: aiKeyAnalysis.analysisSummary, 
         warnings: aiKeyAnalysis.warnings 
-      }, { status: 400 });
+      }, { status: 400 }); // Return 400 for AI-side processing errors
     }
     
     const success = updateKeysFromSqlAnalysis(datasetName, tableName, aiKeyAnalysis);
@@ -65,16 +65,19 @@ export async function POST(request: NextRequest) {
         catalog: updatedCatalog 
       }, { status: 200 });
     } else {
+      // This case might occur if updateKeysFromSqlAnalysis returns false for logical reasons not related to AI errors
+      console.warn('[Enrich Keys SQL API] updateKeysFromSqlAnalysis returned false. Catalog might not have been updated as expected.', aiKeyAnalysis);
       return NextResponse.json({ 
-        error: 'Failed to update catalog with extracted keys. See server logs for details.',
+        error: 'Failed to update catalog with extracted keys. No changes were made or an internal issue occurred.',
         summary: aiKeyAnalysis.analysisSummary,
         warnings: aiKeyAnalysis.warnings
-      }, { status: 500 });
+      }, { status: 500 }); // 500 if catalog update logic failed
     }
 
   } catch (error) {
-    console.error('Enrich Keys via SQL API Error:', error);
+    console.error('[Enrich Keys SQL API] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return NextResponse.json({ error: `Failed to enrich keys from SQL: ${errorMessage}` }, { status: 500 });
   }
 }
+
