@@ -5,16 +5,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
-import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search } from 'lucide-react';
+import { Database, Table2, Columns, Loader2, AlertTriangle, ChevronRight, PackageSearch, FileText, Tag, Info, CalendarDays, KeyRound, Rows, MapPin, Search, Pencil, Save, XCircle } from 'lucide-react';
 import { SensitivityBadge } from '@/components/admin/SensitivityBadge';
 import { cn } from '@/lib/utils';
 import type { EnrichedDataset, EnrichedTable, EnrichedColumn } from '@/types';
-// import Image from 'next/image'; // For placeholder images - remove if not used
 import { Button } from '@/components/ui/button';
-import Link from 'next/link'; // Keep if other links exist, or remove if not used beyond breadcrumb
+import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
 
@@ -103,7 +103,7 @@ const DetailItem = ({ icon: Icon, label, value, className }: { icon?: React.Elem
       </p>
     </div>
   );
-}
+};
 
 
 export default function CatalogPage() {
@@ -115,11 +115,38 @@ export default function CatalogPage() {
     error,
     selectDataset,
     selectTable,
+    updateMetadataField,
   } = useCatalog();
 
   const [datasetFilter, setDatasetFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
   const [columnFilter, setColumnFilter] = useState('');
+
+  // Editing State
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingFieldKey, setEditingFieldKey] = useState<'description' | 'tags' | null>(null);
+  const [currentEditValue, setCurrentEditValue] = useState('');
+
+  const handleEditClick = (itemId: string, fieldKey: 'description' | 'tags', currentValue: string | null | undefined) => {
+    setEditingItemId(itemId);
+    setEditingFieldKey(fieldKey);
+    setCurrentEditValue(currentValue || '');
+  };
+
+  const handleSaveEdit = () => {
+    if (editingItemId && editingFieldKey) {
+      updateMetadataField(editingItemId, editingFieldKey, currentEditValue);
+    }
+    setEditingItemId(null);
+    setEditingFieldKey(null);
+    setCurrentEditValue('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+    setEditingFieldKey(null);
+    setCurrentEditValue('');
+  };
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -148,8 +175,8 @@ export default function CatalogPage() {
     return selectedTable.columns.filter(c => c.name.toLowerCase().includes(columnFilter.toLowerCase()));
   }, [selectedTable, columnFilter]);
 
-  useEffect(() => setTableFilter(''), [selectedDataset]);
-  useEffect(() => setColumnFilter(''), [selectedTable]);
+  useEffect(() => { setTableFilter(''); setEditingItemId(null); }, [selectedDataset]);
+  useEffect(() => { setColumnFilter(''); setEditingItemId(null); }, [selectedTable]);
 
   const clearTableSelection = () => selectTable(null);
   const clearDatasetSelection = () => {
@@ -159,9 +186,67 @@ export default function CatalogPage() {
     window.history.pushState({}, '', url.toString());
   };
 
+  const renderEditableField = (
+    itemId: string,
+    fieldKey: 'description' | 'tags',
+    currentValue: string | null | undefined,
+    label: string,
+    isTextarea: boolean = false,
+    icon?: React.ElementType
+  ) => {
+    const isEditing = editingItemId === itemId && editingFieldKey === fieldKey;
+    const Icon = icon;
+
+    return (
+      <div className="text-sm space-y-1 py-1.5 group">
+        <div className="font-medium text-foreground/70 leading-tight flex items-center gap-1.5">
+          {Icon && <Icon size={15} className="text-primary/90 shrink-0" />}
+          {label}
+          {!isEditing && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+              onClick={() => handleEditClick(itemId, fieldKey, currentValue)}
+            >
+              <Pencil size={12} />
+            </Button>
+          )}
+        </div>
+        {isEditing ? (
+          <div className="space-y-2">
+            {isTextarea ? (
+              <Textarea
+                value={currentEditValue}
+                onChange={(e) => setCurrentEditValue(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
+            ) : (
+              <Input
+                value={currentEditValue}
+                onChange={(e) => setCurrentEditValue(e.target.value)}
+                className="text-sm h-9"
+              />
+            )}
+            <div className="flex gap-2">
+              <Button onClick={handleSaveEdit} size="sm" className="bg-green-600 hover:bg-green-700 text-white"><Save size={14} className="mr-1.5" /> Save</Button>
+              <Button onClick={handleCancelEdit} variant="outline" size="sm"><XCircle size={14} className="mr-1.5" /> Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <p className={cn("text-foreground/90 break-words leading-snug", Icon ? "ml-[calc(15px+0.375rem)]" : "")}>
+            {currentValue || <span className="italic text-muted-foreground">Not set</span>}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+
   if (isLoading && !catalog) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)]"> {/* Adjusted height */}
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
         <p className="text-2xl text-muted-foreground font-light">Loading Catalog Universe...</p>
       </div>
@@ -170,7 +255,7 @@ export default function CatalogPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)] text-destructive p-6 rounded-lg bg-destructive/10 border border-destructive"> {/* Adjusted height */}
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)] text-destructive p-6 rounded-lg bg-destructive/10 border border-destructive">
         <AlertTriangle size={56} className="mb-5" />
         <p className="text-2xl font-semibold">Error Loading Catalog</p>
         <p className="text-md mt-2">{error}</p>
@@ -180,9 +265,9 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden"> {/* Adjusted height */}
+    <div className="flex h-[calc(100vh-8rem)] border border-border bg-background rounded-lg overflow-hidden">
       {/* Left Panel: Dataset Explorer */}
-      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col"> {/* Increased max-w slightly */}
+      <aside className="w-1/4 min-w-[280px] max-w-[350px] bg-secondary/50 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 text-primary flex items-center gap-2"><Database size={20}/> Datasets</h2>
           <div className="relative">
@@ -196,7 +281,7 @@ export default function CatalogPage() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
         </div>
-        <ScrollArea className="flex-1 p-2 space-y-1.5"> {/* Adjusted padding */}
+        <ScrollArea className="flex-1 p-2 space-y-1.5">
           {filteredDatasets.length > 0 ? (
             filteredDatasets.map(ds => (
               <DatasetListItem
@@ -213,157 +298,182 @@ export default function CatalogPage() {
       </aside>
 
       {/* Main Content Panel: Workspace */}
-      <main className="flex-1 flex flex-col overflow-y-auto bg-background p-0">
-        <div className="p-5 space-y-5"> {/* Main padding for workspace content */}
-          <Breadcrumb className="mb-2">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="#" onClick={clearDatasetSelection} className={!selectedDataset ? "text-primary font-semibold" : "text-muted-foreground hover:text-primary/80"}>
-                  Catalog Explorer
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              {selectedDataset && (
-                <>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    {selectedTable ? (
-                      <BreadcrumbLink href="#" onClick={clearTableSelection} className="text-muted-foreground hover:text-primary/80">
-                        {selectedDataset.name}
-                      </BreadcrumbLink>
-                    ) : (
-                      <BreadcrumbPage className="font-semibold text-primary">{selectedDataset.name}</BreadcrumbPage>
-                    )}
-                  </BreadcrumbItem>
-                </>
-              )}
-              {selectedDataset && selectedTable && (
-                <>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage className="font-semibold text-primary">{selectedTable.name}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </>
-              )}
-            </BreadcrumbList>
-          </Breadcrumb>
-
-          {!selectedDataset && (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-18rem)] text-muted-foreground p-10"> {/* Adjusted height */}
-              <PackageSearch size={64} className="mb-6 opacity-50 stroke-1 text-primary/50" />
-              <p className="text-xl font-light">Select a dataset to begin your exploration.</p>
-              <p className="text-sm mt-2 text-center max-w-md">Dive into your data universe by choosing a dataset from the panel on the left.</p>
-            </div>
-          )}
-
-          {/* Dataset Focus View */}
-          {selectedDataset && !selectedTable && (
-            <div className="space-y-5 animate-fadeIn">
-              <Card className="bg-card shadow-sm border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5"> {/* Adjusted gap */}
-                      <Database size={24}/>{selectedDataset.name}
-                    </CardTitle>
-                    <SensitivityBadge level={selectedDataset.sensitivity} />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <p className="text-foreground/80 text-sm leading-relaxed">{selectedDataset.description || "No description available."}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 pt-3 border-t border-border/70 mt-3"> {/* Adjusted gap and border */}
-                    <DetailItem icon={Tag} label="Tags" value={selectedDataset.tags} />
-                    <DetailItem icon={Info} label="Source" value={selectedDataset.source} />
-                    <DetailItem icon={MapPin} label="Location" value={selectedDataset.location} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <section>
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-lg font-semibold text-foreground">Tables ({filteredTables.length})</h3>
-                  <div className="relative w-full max-w-xs">
-                    <Input
-                      type="search"
-                      placeholder="Filter tables..."
-                      value={tableFilter}
-                      onChange={(e) => setTableFilter(e.target.value)}
-                      className="bg-background border-input focus:border-primary h-9 pl-9"
-                    />
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-                {filteredTables.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5"> {/* Adjusted gap */}
-                    {filteredTables.map(tbl => (
-                      <TableListItem key={tbl.id} table={tbl} onSelect={() => selectTable(tbl.id)} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-center py-6 text-sm">No tables found in this dataset or matching your filter.</p>
+      <ScrollArea className="flex-1">
+        <main className="flex-1 flex flex-col bg-background p-0">
+          <div className="p-5 space-y-5">
+            <Breadcrumb className="mb-2">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink href="#" onClick={clearDatasetSelection} className={!selectedDataset ? "text-primary font-semibold" : "text-muted-foreground hover:text-primary/80"}>
+                    Catalog Explorer
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                {selectedDataset && (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      {selectedTable ? (
+                        <BreadcrumbLink href="#" onClick={clearTableSelection} className="text-muted-foreground hover:text-primary/80">
+                          {selectedDataset.name}
+                        </BreadcrumbLink>
+                      ) : (
+                        <BreadcrumbPage className="font-semibold text-primary">{selectedDataset.name}</BreadcrumbPage>
+                      )}
+                    </BreadcrumbItem>
+                  </>
                 )}
-              </section>
-            </div>
-          )}
-
-          {/* Table Focus View */}
-          {selectedDataset && selectedTable && (
-            <div className="space-y-5 animate-fadeIn">
-              <Card className="bg-card shadow-sm border">
-                <CardHeader className="pb-3">
-                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5"> {/* Adjusted gap */}
-                      <Table2 size={24}/>{selectedTable.name}
-                    </CardTitle>
-                    <SensitivityBadge level={selectedTable.sensitivity} />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <p className="text-foreground/80 text-sm leading-relaxed">
-                    {selectedTable.description || "No description available."}
-                  </p>
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 pt-3.5 border-t border-border/70 mt-3.5"> {/* Adjusted gaps and padding/margin */}
-                      <DetailItem icon={Info} label="Owner" value={selectedTable.owner} />
-                      <DetailItem icon={Info} label="Source" value={selectedTable.source} />
-                      <DetailItem icon={MapPin} label="Location" value={selectedTable.location} />
-                      <DetailItem icon={Database} label="DB Name" value={selectedTable.databaseName} />
-                      <DetailItem icon={Info} label="Schema" value={selectedTable.schemaName} />
-                      <DetailItem icon={KeyRound} label="Primary Keys" value={selectedTable.primaryKeys} />
-                      <DetailItem icon={KeyRound} label="Foreign Keys" value={selectedTable.foreignKeys} />
-                      <DetailItem icon={CalendarDays} label="Created" value={selectedTable.createdDate} />
-                      <DetailItem icon={CalendarDays} label="Updated" value={selectedTable.updatedDate} />
-                      <DetailItem icon={Rows} label="Row Count" value={selectedTable.rowCount} />
-                   </div>
-                </CardContent>
-              </Card>
-
-              <section>
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-lg font-semibold text-foreground">Columns ({filteredColumns.length})</h3>
-                   <div className="relative w-full max-w-xs">
-                    <Input
-                      type="search"
-                      placeholder="Filter columns..."
-                      value={columnFilter}
-                      onChange={(e) => setColumnFilter(e.target.value)}
-                      className="bg-background border-input focus:border-primary h-9 pl-9"
-                    />
-                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-                {filteredColumns.length > 0 ? (
-                  <div className="space-y-2.5"> {/* Adjusted gap */}
-                    {filteredColumns.map(col => (
-                      <ColumnListItem key={col.id} column={col} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-center py-6 text-sm">No columns found in this table or matching your filter.</p>
+                {selectedDataset && selectedTable && (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="font-semibold text-primary">{selectedTable.name}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
                 )}
-              </section>
-            </div>
-          )}
-        </div>
-      </main>
+              </BreadcrumbList>
+            </Breadcrumb>
+
+            {!selectedDataset && (
+              <div className="flex flex-col items-center justify-center h-[calc(100vh-18rem)] text-muted-foreground p-10">
+                <PackageSearch size={64} className="mb-6 opacity-50 stroke-1 text-primary/50" />
+                <p className="text-xl font-light">Select a dataset to begin your exploration.</p>
+                <p className="text-sm mt-2 text-center max-w-md">Dive into your data universe by choosing a dataset from the panel on the left.</p>
+              </div>
+            )}
+
+            {/* Dataset Focus View */}
+            {selectedDataset && !selectedTable && (
+              <div className="space-y-5 animate-fadeIn">
+                <Card className="bg-card shadow-sm border">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
+                        <Database size={24}/>{selectedDataset.name}
+                      </CardTitle>
+                      <SensitivityBadge level={selectedDataset.sensitivity} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {renderEditableField(selectedDataset.id, 'description', selectedDataset.description, "Description", true)}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 pt-3 border-t border-border/70 mt-3">
+                      {renderEditableField(selectedDataset.id, 'tags', selectedDataset.tags, "Tags", false, Tag)}
+                      <DetailItem icon={Info} label="Source" value={selectedDataset.source} />
+                      <DetailItem icon={MapPin} label="Location" value={selectedDataset.location} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <section>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-semibold text-foreground">Tables ({filteredTables.length})</h3>
+                    <div className="relative w-full max-w-xs">
+                      <Input
+                        type="search"
+                        placeholder="Filter tables..."
+                        value={tableFilter}
+                        onChange={(e) => setTableFilter(e.target.value)}
+                        className="bg-background border-input focus:border-primary h-9 pl-9"
+                      />
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    </div>
+                  </div>
+                  {filteredTables.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                      {filteredTables.map(tbl => (
+                        <TableListItem key={tbl.id} table={tbl} onSelect={() => selectTable(tbl.id)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-center py-6 text-sm">No tables found in this dataset or matching your filter.</p>
+                  )}
+                </section>
+              </div>
+            )}
+
+            {/* Table Focus View */}
+            {selectedDataset && selectedTable && (
+              <div className="space-y-5 animate-fadeIn">
+                <Card className="bg-card shadow-sm border">
+                  <CardHeader className="pb-3">
+                     <div className="flex items-center justify-between">
+                      <CardTitle className="text-xl font-bold text-primary flex items-center gap-2.5">
+                        <Table2 size={24}/>{selectedTable.name}
+                      </CardTitle>
+                      <SensitivityBadge level={selectedTable.sensitivity} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {renderEditableField(selectedTable.id, 'description', selectedTable.description, "Description", true)}
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 pt-3.5 border-t border-border/70 mt-3.5">
+                        {renderEditableField(selectedTable.id, 'tags', selectedTable.tags, "Tags", false, Tag)}
+                        <DetailItem icon={Info} label="Owner" value={selectedTable.owner} />
+                        <DetailItem icon={Info} label="Source" value={selectedTable.source} />
+                        <DetailItem icon={MapPin} label="Location" value={selectedTable.location} />
+                        <DetailItem icon={Database} label="DB Name" value={selectedTable.databaseName} />
+                        <DetailItem icon={Info} label="Schema" value={selectedTable.schemaName} />
+                        <DetailItem icon={KeyRound} label="Primary Keys" value={selectedTable.primaryKeys} />
+                        <DetailItem icon={KeyRound} label="Foreign Keys" value={selectedTable.foreignKeys} />
+                        <DetailItem icon={CalendarDays} label="Created" value={selectedTable.createdDate} />
+                        <DetailItem icon={CalendarDays} label="Updated" value={selectedTable.updatedDate} />
+                        <DetailItem icon={Rows} label="Row Count" value={selectedTable.rowCount} />
+                     </div>
+                  </CardContent>
+                </Card>
+
+                <section>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-semibold text-foreground">Columns ({filteredColumns.length})</h3>
+                     <div className="relative w-full max-w-xs">
+                      <Input
+                        type="search"
+                        placeholder="Filter columns..."
+                        value={columnFilter}
+                        onChange={(e) => setColumnFilter(e.target.value)}
+                        className="bg-background border-input focus:border-primary h-9 pl-9"
+                      />
+                       <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    </div>
+                  </div>
+                  {filteredColumns.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {filteredColumns.map(col => (
+                        // ColumnListItem is display-only for now, but could be enhanced for editing.
+                        // For this iteration, editing column descriptions/tags will be part of its detailed card.
+                        <Card key={col.id} className="bg-card border">
+                          <CardHeader className="p-3 pb-2">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground/90">
+                                <Columns size={16} className="text-primary/90" />
+                                {col.name}
+                              </CardTitle>
+                              <SensitivityBadge level={col.sensitivity} />
+                            </div>
+                            <CardDescription className="text-xs mt-1 text-foreground/70">
+                              Data Type: <span className="font-medium text-foreground/80">{col.dataType || "N/A"}</span>
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-3 pt-1 text-xs space-y-1.5 text-muted-foreground">
+                             {renderEditableField(col.id, 'description', col.description, "Description", true)}
+                             {renderEditableField(col.id, 'tags', col.tags, "Tags", false, Tag)}
+                            {(col.isPrimaryKey || col.isForeignKey) && (
+                              <div className="flex gap-2 pt-1">
+                                {col.isPrimaryKey && <Badge variant="outline" className="border-accent text-accent text-[0.7rem] px-1.5 py-0.5">Primary Key</Badge>}
+                                {col.isForeignKey && <Badge variant="outline" className="border-accent/70 text-accent/70 text-[0.7rem] px-1.5 py-0.5">Foreign Key</Badge>}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-center py-6 text-sm">No columns found in this table or matching your filter.</p>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        </main>
+      </ScrollArea>
     </div>
   );
 }
-
