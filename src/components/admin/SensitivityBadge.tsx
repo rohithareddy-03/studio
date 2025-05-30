@@ -39,7 +39,7 @@ export function SensitivityBadge({ level, size = 'md' }: SensitivityBadgeProps) 
   }
   
   const iconSize = size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5';
-  consttextSize = size === 'sm' ? 'text-[0.65rem]' : 'text-xs';
+  const textSize = size === 'sm' ? 'text-[0.65rem]' : 'text-xs';
   const padding = size === 'sm' ? 'px-1.5 py-0.5' : 'px-2 py-1';
 
 
@@ -56,3 +56,4 @@ export function SensitivityBadge({ level, size = 'md' }: SensitivityBadgeProps) 
     </Badge>
   );
 }
+
