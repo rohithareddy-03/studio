@@ -82,28 +82,29 @@ export type EnrichTableOutput = z.infer<typeof EnrichTableOutputSchema>;
 
 
 export async function enrichSingleTable(input: EnrichTableInput): Promise<EnrichTableOutput> {
-  // Add detailed logging for input
   console.log('[enrichSingleTableFlow] Input received for table processing:', JSON.stringify({
     datasetName: input.datasetContext.Dataset_name,
     tableName: input.tableToEnrich.TABLE_NAME,
     columnCount: input.columnsToEnrich.length,
     otherTableCount: input.otherTableNamesInDataset?.length || 0,
+    firstColumnOriginalDescription: input.columnsToEnrich[0]?.column_description
   }, null, 2));
 
   try {
-    const flowResult = await enrichTableFlow(input);
+    const flowResult = await enrichTableFlow(input); 
     console.log(`[enrichSingleTableFlow] Successfully processed table: ${input.tableToEnrich.TABLE_NAME}. Output snippet:`, JSON.stringify(flowResult, null, 2).substring(0,1000) + '...');
     return flowResult;
   } catch (error) {
-    console.error(`[enrichSingleTable Function Error] Failed to enrich table ${input.tableToEnrich.TABLE_NAME} during flow execution:`, error);
-    throw error; // Re-throw so the caller (catalog-store) handles it
+    console.error(`[enrichSingleTable Function Error] Failed to enrich table ${input.tableToEnrich.TABLE_NAME} during flow execution. Input that caused error:`, JSON.stringify(input, null, 2).substring(0,1000) + "...");
+    console.error(`[enrichSingleTable Function Error] Detailed error:`, error);
+    throw error; 
   }
 }
 
 const prompt = ai.definePrompt({
   name: 'enrichSingleTablePrompt',
   input: {schema: EnrichTableInputSchema},
-  output: {schema: EnrichTableOutputSchema}, // This is the schema Genkit will use to validate the LLM's direct JSON output
+  output: {schema: EnrichTableOutputSchema}, 
   prompt: `You are a data catalog enrichment assistant. Your task is to enrich the metadata for a single table and its columns, based on the provided context.
 
 Dataset Context:
@@ -170,27 +171,30 @@ const enrichTableFlow = ai.defineFlow(
     outputSchema: EnrichTableOutputSchema,
   },
   async (input) => {
-    // Sanitize input for AI
     const sanitizedTable = {
       ...input.tableToEnrich,
       Description: input.tableToEnrich.Description || "",
       Table_tags: input.tableToEnrich.Table_tags || "",
+      Sensitivity: input.tableToEnrich.Sensitivity || "unknown",
     };
-    const sanitizedColumns = (input.columnsToEnrich || []).map(c => ({ // Ensure columnsToEnrich is an array
+    const sanitizedColumns = (input.columnsToEnrich || []).map(c => ({ 
       ...c,
       column_description: c.column_description || "",
       Column_tags: c.Column_tags || "",
+      Sensitivity: c.Sensitivity || "unknown",
+      PRIMARY_KEY: c.PRIMARY_KEY || null, // Pass null if not set
+      FOREIGN_KEY: c.FOREIGN_KEY || null, // Pass null if not set
     }));
 
     const sanitizedInput = {
       ...input,
-      datasetContext: { // Ensure datasetContext and its properties are not undefined/null for the prompt
+      datasetContext: { 
         Dataset_name: input.datasetContext.Dataset_name,
-        Dataset_description: input.datasetContext.Dataset_description || "", // Pass empty string if null/undefined
+        Dataset_description: input.datasetContext.Dataset_description || "", 
       },
       tableToEnrich: sanitizedTable,
       columnsToEnrich: sanitizedColumns,
-      otherTableNamesInDataset: input.otherTableNamesInDataset || [], // Ensure otherTableNamesInDataset is an array for the prompt
+      otherTableNamesInDataset: input.otherTableNamesInDataset || [], 
     };
     
     console.log('[enrichTableFlow] Sanitized input being sent to AI prompt:', JSON.stringify({
@@ -199,10 +203,11 @@ const enrichTableFlow = ai.defineFlow(
         tableDescriptionSnippet: sanitizedInput.tableToEnrich.Description?.substring(0,50),
         columnCount: sanitizedInput.columnsToEnrich.length,
         firstColumnName: sanitizedInput.columnsToEnrich[0]?.COLUMN_NAME,
+        firstColumnDescription: sanitizedInput.columnsToEnrich[0]?.column_description?.substring(0,50),
     }, null, 2));
 
 
-    const {output} = await prompt(sanitizedInput); // This is where Zod validation of AI output happens against EnrichTableOutputSchema
+    const {output} = await prompt(sanitizedInput); 
 
     if (!output || !output.enrichedTable || !output.enrichedColumns) {
       console.error('[enrichTableFlow] AI enrichment for table returned no output or malformed response envelope. Output received:', output);
@@ -211,64 +216,89 @@ const enrichTableFlow = ai.defineFlow(
     
     console.log(`[enrichTableFlow] Raw AI Output for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(output, null, 2).substring(0, 500) + "...");
 
-    // Normalize PK/FK to strings 'true'/'false' or null
-    // Also ensure enrichedColumns itself is an array, defaulting to empty if AI somehow returns null/undefined (though Zod should prevent this)
     const aiEnrichedColumns = output.enrichedColumns || [];
-    const normalizedColumns = aiEnrichedColumns.map(col => {
-        let pkValue = col.PRIMARY_KEY;
+    const normalizedColumns = aiEnrichedColumns.map(colAI => {
+        let pkValue = colAI.PRIMARY_KEY;
         if (typeof pkValue === 'boolean') {
             pkValue = pkValue ? 'true' : 'false';
         } else if (typeof pkValue === 'string' && (pkValue.toLowerCase() === 'true' || pkValue.toLowerCase() === 'false')) {
             pkValue = pkValue.toLowerCase();
         } else {
-            pkValue = null; // Default to null if not clearly true/false string/boolean
+            const originalColInput = input.columnsToEnrich.find(c => c.COLUMN_NAME === colAI.COLUMN_NAME);
+            pkValue = originalColInput?.PRIMARY_KEY ?? null; 
         }
 
-        let fkValue = col.FOREIGN_KEY;
+        let fkValue = colAI.FOREIGN_KEY;
         if (typeof fkValue === 'boolean') {
             fkValue = fkValue ? 'true' : 'false';
         } else if (typeof fkValue === 'string' && (fkValue.toLowerCase() === 'true' || fkValue.toLowerCase() === 'false')) {
             fkValue = fkValue.toLowerCase();
         } else {
-            fkValue = null; // Default to null
+            const originalColInput = input.columnsToEnrich.find(c => c.COLUMN_NAME === colAI.COLUMN_NAME);
+            fkValue = originalColInput?.FOREIGN_KEY ?? null;
         }
         
-        // Ensure all original fields from ColumnSchemaForAIInput are present, falling back to what AI returned,
-        // then to original input column, which is important because EnrichedColumnDataSchema extends ColumnSchemaForAIInput
-        const originalInputColumn = input.columnsToEnrich.find(c => c.COLUMN_NAME === col.COLUMN_NAME);
+        const originalInputColumn = input.columnsToEnrich.find(c => c.COLUMN_NAME === colAI.COLUMN_NAME);
+        if (!originalInputColumn) {
+            console.warn(`[enrichTableFlow-Normalize] Column ${colAI.COLUMN_NAME} from AI not found in original input columns for table ${input.tableToEnrich.TABLE_NAME}. Skipping this column from AI.`);
+            return null; // Skip this AI column if no match in original input
+        }
 
+        return { // Ensure all fields from ColumnSchemaForAIInput are present
+            TABLE_NAME: input.tableToEnrich.TABLE_NAME, // Crucial: ensure AI output uses correct table name
+            COLUMN_NAME: colAI.COLUMN_NAME, // Crucial: ensure AI output uses correct column name
+            
+            // Prioritize AI's output for enrichable fields, then original input, then null/default
+            column_description: colAI.column_description ?? originalInputColumn.column_description ?? null,
+            Column_tags: colAI.Column_tags ?? originalInputColumn.Column_tags ?? null,
+            Sensitivity: colAI.Sensitivity ?? originalInputColumn.Sensitivity ?? 'unknown',
+            PRIMARY_KEY: pkValue,
+            FOREIGN_KEY: fkValue,
+            
+            // Preserve non-enrichable fields from original input if AI doesn't provide them
+            DATA_TYPE: colAI.DATA_TYPE ?? originalInputColumn.DATA_TYPE ?? null,
+            location: colAI.location ?? originalInputColumn.location ?? null,
+        };
+    }).filter(Boolean) as z.infer<typeof EnrichedColumnDataSchema>[]; // Filter out nulls if any column was skipped
+    
+    // Ensure all original columns are present in the output, updated if AI provided enrichment
+    const finalNormalizedColumns = input.columnsToEnrich.map(originalCol => {
+        const aiVersion = normalizedColumns.find(nc => nc.COLUMN_NAME === originalCol.COLUMN_NAME);
+        if (aiVersion) {
+            return aiVersion; // Return AI version if found (already includes fallbacks)
+        }
+        // If AI didn't return this column, return original raw column (should not happen if AI is correct)
+        console.warn(`[enrichTableFlow-Normalize] Original column ${originalCol.COLUMN_NAME} not found in AI's processed output for table ${input.tableToEnrich.TABLE_NAME}. Returning original.`);
         return {
-            ...originalInputColumn, // Start with all fields from original column input
-            ...col, // Overlay with whatever AI returned (respecting its structure)
-            TABLE_NAME: col.TABLE_NAME || originalInputColumn?.TABLE_NAME || input.tableToEnrich.TABLE_NAME, // Ensure TABLE_NAME is present
-            COLUMN_NAME: col.COLUMN_NAME || originalInputColumn?.COLUMN_NAME, // Ensure COLUMN_NAME is present
-            PRIMARY_KEY: pkValue, // Use normalized value
-            FOREIGN_KEY: fkValue, // Use normalized value
-            // For enrichable text fields, prefer AI's output, then original, then null
-            column_description: col.column_description ?? originalInputColumn?.column_description ?? null,
-            Column_tags: col.Column_tags ?? originalInputColumn?.Column_tags ?? null,
-            Sensitivity: col.Sensitivity ?? originalInputColumn?.Sensitivity ?? 'unknown',
-            // For non-enrichable fields, prefer AI's output (if it preserved it), then original, then null
-            DATA_TYPE: col.DATA_TYPE ?? originalInputColumn?.DATA_TYPE ?? null,
-            location: col.location ?? originalInputColumn?.location ?? null,
+            ...originalCol, // Spread original raw column
+            TABLE_NAME: input.tableToEnrich.TABLE_NAME, // Ensure correct table name
+             // Ensure PK/FK are string 'true'/'false' or null
+            PRIMARY_KEY: String(originalCol.PRIMARY_KEY).toLowerCase() === 'true' ? 'true' : (String(originalCol.PRIMARY_KEY).toLowerCase() === 'false' ? 'false' : null),
+            FOREIGN_KEY: String(originalCol.FOREIGN_KEY).toLowerCase() === 'true' ? 'true' : (String(originalCol.FOREIGN_KEY).toLowerCase() === 'false' ? 'false' : null),
         };
     });
-    
-    // Ensure the enrichedTable also preserves all original fields
+
+
     const originalInputTable = input.tableToEnrich;
-    const finalEnrichedTable = {
-        ...originalInputTable, // Start with all fields from original table input
-        ...output.enrichedTable, // Overlay with whatever AI returned for the table
-        // For enrichable text fields, prefer AI's output, then original, then null
+    const finalEnrichedTableData = { // Ensure all fields from TableSchemaForAIInput are present
+        ...originalInputTable, 
+        ...output.enrichedTable, 
+        TABLE_NAME: input.tableToEnrich.TABLE_NAME, // Ensure AI didn't change table name
+        Dataset_name: input.datasetContext.Dataset_name, // Ensure AI didn't change dataset name
+
         Description: output.enrichedTable.Description ?? originalInputTable.Description ?? null,
         Table_tags: output.enrichedTable.Table_tags ?? originalInputTable.Table_tags ?? null,
         Sensitivity: output.enrichedTable.Sensitivity ?? originalInputTable.Sensitivity ?? 'unknown',
+        // Ensure row_count is a string or null
+        Row_count: (output.enrichedTable.Row_count !== undefined && output.enrichedTable.Row_count !== null) 
+                    ? String(output.enrichedTable.Row_count) 
+                    : (originalInputTable.Row_count ?? null),
     };
 
 
     const finalOutput = {
-        enrichedTable: finalEnrichedTable,
-        enrichedColumns: normalizedColumns,
+        enrichedTable: finalEnrichedTableData,
+        enrichedColumns: finalNormalizedColumns,
     };
     
     console.log(`[enrichTableFlow] Processed & Normalized Output for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(finalOutput, null, 2).substring(0, 500) + "...");
