@@ -94,7 +94,7 @@ function transformRawDataToCatalog(rawDatasets: RawDataset[], rawTables: RawTabl
                   location: rc.location,
                 });
             } else {
-                console.warn(`Duplicate raw column ID detected and skipped: ${columnId}`);
+                // console.warn(`Duplicate raw column ID detected and skipped: ${columnId}`);
             }
           });
         const tableColumns: EnrichedColumn[] = Array.from(uniqueTableColumnsMap.values());
@@ -148,7 +148,7 @@ function transformEnrichedDataToCatalog(
       id: ed_ai.Dataset_name,
       name: ed_ai.Dataset_name,
       description: ed_ai.Dataset_description, // AI is authoritative for this field
-      tags: ed_ai.Tags ?? originalRawDataset?.Tags ?? null,
+      tags: ed_ai.Tags, // AI is authoritative for this field
       source: ed_ai.source ?? originalRawDataset?.source ?? null,
       location: ed_ai.location ?? originalRawDataset?.location ?? null,
       sensitivity: 'unknown', // Dataset sensitivity often derived or managed separately
@@ -184,15 +184,16 @@ function transformEnrichedDataToCatalog(
               id: columnId,
               name: ec_ai.COLUMN_NAME,
               description: ec_ai.column_description, // AI is authoritative
-              tags: ec_ai.Column_tags,             // AI is authoritative
+              tags: ec_ai.Column_tags, // AI is authoritative
               dataType: ec_ai.DATA_TYPE ?? originalRawColumn?.DATA_TYPE ?? null,
-              isPrimaryKey: (ec_ai.PRIMARY_KEY === 'true' || ec_ai.PRIMARY_KEY === true) ?? (originalRawColumn?.PRIMARY_KEY === 'true' || originalRawColumn?.PRIMARY_KEY === true) ?? false,
-              isForeignKey: (ec_ai.FOREIGN_KEY === 'true' || ec_ai.FOREIGN_KEY === true) ?? (originalRawColumn?.FOREIGN_KEY === 'true' || originalRawColumn?.FOREIGN_KEY === true) ?? false,
+              // AI determines PK/FK and sensitivity
+              isPrimaryKey: (ec_ai.PRIMARY_KEY === 'true' || ec_ai.PRIMARY_KEY === true),
+              isForeignKey: (ec_ai.FOREIGN_KEY === 'true' || ec_ai.FOREIGN_KEY === true),
               sensitivity: ec_ai.Sensitivity ?? originalRawColumn?.Sensitivity ?? 'unknown',
               location: ec_ai.location ?? originalRawColumn?.location ?? null,
             });
           } else {
-            console.warn(`Duplicate column ID detected and skipped during AI output transformation: ${columnId}`);
+            // console.warn(`Duplicate column ID detected and skipped during AI output transformation: ${columnId}`);
           }
         });
       const tableColumns: EnrichedColumn[] = Array.from(uniqueTableColumnsMap.values());
@@ -201,18 +202,18 @@ function transformEnrichedDataToCatalog(
         id: `${dataset.name}/${et_ai.TABLE_NAME}`,
         name: et_ai.TABLE_NAME,
         description: et_ai.Description, // AI is authoritative
-        tags: et_ai.Table_tags,       // AI is authoritative
+        tags: et_ai.Table_tags, // AI is authoritative
+        sensitivity: et_ai.Sensitivity ?? originalRawTable?.Sensitivity ?? 'unknown', // AI determines sensitivity
         source: et_ai.source ?? originalRawTable?.source ?? null,
         location: et_ai.location ?? originalRawTable?.location ?? null,
         databaseName: et_ai.DATABASE_NAME ?? originalRawTable?.DATABASE_NAME ?? null,
         schemaName: et_ai.SCHEMA_NAME ?? originalRawTable?.SCHEMA_NAME ?? null,
         owner: et_ai.OWNER ?? originalRawTable?.OWNER ?? null,
-        primaryKeys: et_ai.PRIMARY_KEYS ?? originalRawTable?.PRIMARY_KEYS ?? null,
-        foreignKeys: et_ai.FOREIGN_KEYS ?? originalRawTable?.FOREIGN_KEYS ?? null,
+        primaryKeys: et_ai.PRIMARY_KEYS ?? originalRawTable?.PRIMARY_KEYS ?? null, // This is descriptive, AI handles column-level PK
+        foreignKeys: et_ai.FOREIGN_KEYS ?? originalRawTable?.FOREIGN_KEYS ?? null, // This is descriptive, AI handles column-level FK
         createdDate: et_ai.CREATED_DATE ?? originalRawTable?.CREATED_DATE ?? null,
         updatedDate: et_ai.UPDATED_DATE ?? originalRawTable?.UPDATED_DATE ?? null,
         rowCount: (et_ai.Row_count ? parseInt(et_ai.Row_count, 10) : null) ?? (originalRawTable?.Row_count ? parseInt(originalRawTable.Row_count, 10) : undefined),
-        sensitivity: et_ai.Sensitivity ?? originalRawTable?.Sensitivity ?? 'unknown',
         columns: tableColumns,
       };
       dataset.tables.push(table);

@@ -3,7 +3,8 @@
 
 /**
  * @fileOverview A metadata enrichment AI agent that uses Gemini to enhance
- * dataset descriptions, add relevant tags, and classify field sensitivity.
+ * dataset descriptions, add relevant tags, and classify field sensitivity,
+ * primary keys, and foreign keys.
  *
  * - enrichMetadata - A function that enriches metadata of datasets, tables, and columns.
  * - EnrichMetadataInput - The input type for the enrichMetadata function.
@@ -16,10 +17,9 @@ import type { RawDataset, RawTable, RawColumn } from '@/types';
 
 
 // Define Zod schemas based on Raw types for AI input/output
-// These should match the structure the AI is expected to receive and produce,
-// which aligns with the Raw types plus nullability for optional fields.
+// These should match the structure the AI is expected to receive and produce.
 
-const DatasetSchemaForAI = z.object({
+const DatasetSchemaForAIInput = z.object({
   Dataset_name: z.string(),
   Dataset_description: z.string().nullable().optional(),
   Tags: z.string().nullable().optional(),
@@ -27,7 +27,7 @@ const DatasetSchemaForAI = z.object({
   location: z.string().nullable().optional(),
 });
 
-const TableSchemaForAI = z.object({
+const TableSchemaForAIInput = z.object({
   TABLE_NAME: z.string(),
   Dataset_name: z.string(),
   source: z.string().nullable().optional(),
@@ -40,43 +40,56 @@ const TableSchemaForAI = z.object({
   CREATED_DATE: z.string().nullable().optional(),
   UPDATED_DATE: z.string().nullable().optional(),
   Row_count: z.string().nullable().optional(),
-  Description: z.string().nullable().optional(), // AI enriches this
-  Table_tags: z.string().nullable().optional(), // AI enriches this
+  Description: z.string().nullable().optional(),
+  Table_tags: z.string().nullable().optional(),
   Sensitivity: z.string().nullable().optional(),
 });
 
-const ColumnSchemaForAI = z.object({
+const ColumnSchemaForAIInput = z.object({
   TABLE_NAME: z.string(),
   COLUMN_NAME: z.string(),
   DATA_TYPE: z.string().nullable().optional(),
-  PRIMARY_KEY: z.string().nullable().optional(), // Expect 'true'/'false' as string
-  FOREIGN_KEY: z.string().nullable().optional(), // Expect 'true'/'false' as string
-  column_description: z.string().nullable().optional(), // AI enriches this
-  Column_tags: z.string().nullable().optional(), // AI enriches this
+  PRIMARY_KEY: z.string().nullable().optional(), // Input might be 'true'/'false' or empty
+  FOREIGN_KEY: z.string().nullable().optional(), // Input might be 'true'/'false' or empty
+  column_description: z.string().nullable().optional(),
+  Column_tags: z.string().nullable().optional(),
   Sensitivity: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
 });
 
 
 const EnrichMetadataInputSchema = z.object({
-  datasets: z.array(DatasetSchemaForAI),
-  tables: z.array(TableSchemaForAI),
-  columns: z.array(ColumnSchemaForAI),
+  datasets: z.array(DatasetSchemaForAIInput),
+  tables: z.array(TableSchemaForAIInput),
+  columns: z.array(ColumnSchemaForAIInput),
 });
 export type EnrichMetadataInput = z.infer<typeof EnrichMetadataInputSchema>;
 
+// Output Schemas - AI will populate these fields
+const DatasetSchemaForAIOutput = DatasetSchemaForAIInput.extend({
+  Dataset_description: z.string().nullable().optional().describe("Generated or improved dataset description. Can be an empty string if no meaningful description can be generated."),
+  Tags: z.string().nullable().optional().describe("Generated or improved comma-separated tags for the dataset. Can be an empty string if no meaningful tags can be generated."),
+});
+
+const TableSchemaForAIOutput = TableSchemaForAIInput.extend({
+  Description: z.string().nullable().optional().describe("Generated or improved table description. Can be an empty string if no meaningful description can be generated."),
+  Table_tags: z.string().nullable().optional().describe("Generated or improved comma-separated tags for the table. Can be an empty string if no meaningful tags can be generated."),
+  Sensitivity: z.string().nullable().optional().describe("Determined sensitivity level ('low', 'medium', 'high', or 'unknown')."),
+});
+
+const ColumnSchemaForAIOutput = ColumnSchemaForAIInput.extend({
+  column_description: z.string().nullable().optional().describe("Generated or improved column description. Can be an empty string if no meaningful description can be generated."),
+  Column_tags: z.string().nullable().optional().describe("Generated or improved comma-separated tags for the column. Can be an empty string if no meaningful tags can be generated."),
+  Sensitivity: z.string().nullable().optional().describe("Determined sensitivity level ('low', 'medium', 'high', or 'unknown')."),
+  PRIMARY_KEY: z.string().nullable().optional().describe("Determined if this column is a primary key ('true' or 'false' as a string)."),
+  FOREIGN_KEY: z.string().nullable().optional().describe("Determined if this column is a foreign key ('true' or 'false' as a string)."),
+});
+
+
 const EnrichMetadataOutputSchema = z.object({
-  datasets: z.array(DatasetSchemaForAI.extend({
-    Dataset_description: z.string().nullable().optional().describe("Enriched dataset description. Can be an empty string if no meaningful description can be generated."),
-  })),
-  tables: z.array(TableSchemaForAI.extend({
-    Description: z.string().nullable().optional().describe("Enriched table description. Can be an empty string if no meaningful description can be generated."),
-    Table_tags: z.string().nullable().optional().describe("Enriched table tags. Can be an empty string if no meaningful tags can be generated."),
-  })),
-  columns: z.array(ColumnSchemaForAI.extend({
-    column_description: z.string().nullable().optional().describe("Enriched column description. Can be an empty string if no meaningful description can be generated."),
-    Column_tags: z.string().nullable().optional().describe("Enriched column tags. Can be an empty string if no meaningful tags can be generated."),
-  })),
+  datasets: z.array(DatasetSchemaForAIOutput),
+  tables: z.array(TableSchemaForAIOutput),
+  columns: z.array(ColumnSchemaForAIOutput),
 });
 export type EnrichMetadataOutput = z.infer<typeof EnrichMetadataOutputSchema>;
 
@@ -89,18 +102,42 @@ const enrichMetadataPrompt = ai.definePrompt({
   name: 'enrichMetadataPrompt',
   input: {schema: EnrichMetadataInputSchema},
   output: {schema: EnrichMetadataOutputSchema},
-  prompt: `You are a metadata enrichment assistant. Your task is to enhance the provided dataset, table, and column metadata. Specifically, if descriptions or tags are missing or sparse, you should generate or improve them.
-- For datasets, enrich 'Dataset_description'.
-- For tables, enrich 'Description' and 'Table_tags'.
-- For columns, enrich 'column_description' and 'Column_tags'.
+  prompt: `You are a data catalog enrichment assistant. Your primary goal is to analyze the provided raw metadata for datasets, tables, and columns, and then generate or enhance specific fields to improve the catalog's utility for data analysts and other AI assistants. You must preserve all existing data that you are not explicitly asked to modify or determine.
 
-If a description or tag field is already populated, you can choose to refine it or leave it as is if it's good quality.
-Preserve all other existing fields, including 'Sensitivity', 'source', 'location', primary/foreign keys, etc.
-Ensure the output strictly adheres to the provided JSON schema.
+## Enrichment Tasks:
+
+1.  **For Each Dataset:**
+    *   Generate or improve \`Dataset_description\`: A concise, informative description of the dataset.
+    *   Generate or improve \`Tags\`: Relevant comma-separated keywords or phrases.
+
+2.  **For Each Table:**
+    *   Generate or improve \`Description\`: A detailed description of the table's purpose, content, and common use cases.
+    *   Generate or improve \`Table_tags\`: Relevant comma-separated keywords for the table.
+    *   Determine \`Sensitivity\`: Classify as 'low', 'medium', or 'high' based on the table's name, its description, and the nature of its columns (e.g., presence of PII, financial data). Default to 'unknown' if unclear.
+
+3.  **For Each Column:**
+    *   Generate or improve \`column_description\`: A clear explanation of what the column represents.
+    *   Generate or improve \`Column_tags\`: Relevant comma-separated keywords for the column.
+    *   Determine \`Sensitivity\`: Classify as 'low', 'medium', or 'high' based on column name, data type, and description. Consider PII, financial data, etc. Default to 'unknown' if unclear.
+    *   Determine \`PRIMARY_KEY\`: Based on the column's name (e.g., 'ID', 'PK', '{table_name}_ID') and its nature, determine if it's likely a primary key. Output 'true' or 'false' (as a string). If a value is already provided, you can validate it or refine your decision.
+    *   Determine \`FOREIGN_KEY\`: Based on the column's name (e.g., '{related_table}_ID', 'FK_') and its relationship to other tables (if inferable from names), determine if it's likely a foreign key. Output 'true' or 'false' (as a string). If a value is already provided, you can validate it or refine your decision.
+
+## Input Context:
+
+You will be provided with arrays of datasets, tables, and columns.
+- When processing a table, consider its columns and the names of other tables within the same dataset for context.
+- When processing a column, consider its table name and the overall dataset.
+- Give preference to existing values for Sensitivity, PRIMARY_KEY, and FOREIGN_KEY if they are already provided in the input and seem reasonable. Your role is to fill in blanks or correct obvious errors for these determination fields.
+
+## Input Data:
 
 Datasets: {{{JSON.stringify(datasets)}}}
 Tables: {{{JSON.stringify(tables)}}}
-Columns: {{{JSON.stringify(columns)}}}`,
+Columns: {{{JSON.stringify(columns)}}}
+
+## Output Format:
+Ensure your output strictly adheres to the provided JSON schema. For fields you are asked to generate (like descriptions or tags), if an existing value is good, you can reuse or refine it. If you cannot generate a meaningful description or tags, return an empty string "" or null for those specific text fields. For determination fields (\`Sensitivity\`, \`PRIMARY_KEY\`, \`FOREIGN_KEY\`), provide your best assessment.
+`,
 });
 
 const enrichMetadataFlow = ai.defineFlow(
@@ -113,9 +150,23 @@ const enrichMetadataFlow = ai.defineFlow(
     // Sanitize input to ensure fields intended for AI generation are at least empty strings if null/undefined
     // This helps guide the AI.
     const sanitizedInput = {
-        datasets: input.datasets.map(d => ({...d, Dataset_description: d.Dataset_description || ""})),
-        tables: input.tables.map(t => ({...t, Description: t.Description || "", Table_tags: t.Table_tags || ""})),
-        columns: input.columns.map(c => ({...c, column_description: c.column_description || "", Column_tags: c.Column_tags || ""})),
+        datasets: input.datasets.map(d => ({
+            ...d,
+            Dataset_description: d.Dataset_description || "",
+            Tags: d.Tags || "",
+        })),
+        tables: input.tables.map(t => ({
+            ...t,
+            Description: t.Description || "",
+            Table_tags: t.Table_tags || "",
+            // Sensitivity for tables will be determined by AI. Pass existing if available.
+        })),
+        columns: input.columns.map(c => ({
+            ...c,
+            column_description: c.column_description || "",
+            Column_tags: c.Column_tags || "",
+            // Sensitivity, PRIMARY_KEY, FOREIGN_KEY for columns will be determined by AI. Pass existing if available.
+        })),
     };
 
     const promptResponse = await enrichMetadataPrompt(sanitizedInput);
