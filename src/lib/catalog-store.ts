@@ -46,10 +46,10 @@ function parseWorkbookToRawData(workbook: XLSX.WorkBook): { datasets: RawDataset
   }
 
   const tables = rawTablesSheet ? XLSX.utils.sheet_to_json<RawTable>(rawTablesSheet, { defval: null }) : [];
-  addLog(`[CatalogStore-ParseWorkbook] Raw tables parsed from sheet (first 2 items): ${JSON.stringify(tables.slice(0, 2))}`);
+  addLog(`[CatalogStore-ParseWorkbook] Raw tables parsed from sheet (count: ${tables.length}, first 2 items): ${JSON.stringify(tables.slice(0, 2))}`);
   
   const columns = rawColumnsSheet ? XLSX.utils.sheet_to_json<RawColumn>(rawColumnsSheet, { defval: null }) : [];
-  addLog(`[CatalogStore-ParseWorkbook] Raw columns parsed from sheet (first 2 items): ${JSON.stringify(columns.slice(0, 2))}`);
+  addLog(`[CatalogStore-ParseWorkbook] Raw columns parsed from sheet (count: ${columns.length}, first 2 items): ${JSON.stringify(columns.slice(0, 2))}`);
   
   addLog(`[CatalogStore-ParseWorkbook] Successfully parsed workbook. Datasets: ${datasets.length}, Tables: ${tables.length}, Columns: ${columns.length}`);
   return { datasets, tables, columns };
@@ -116,7 +116,7 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
     return { datasets: [] };
   }
 
-  addLog(`[CatalogStore-Transform] Starting transformation of raw data to initial catalog structure. Input raw datasets count: ${raw.datasets.length}`);
+  addLog(`[CatalogStore-Transform] Starting transformation. Input raw datasets: ${raw.datasets.length}, raw tables: ${(raw.tables || []).length}, raw columns: ${(raw.columns || []).length}`);
   const datasetsMap = new Map<string, EnrichedDataset>();
 
   raw.datasets.forEach((rd, index) => {
@@ -148,12 +148,15 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
     }
     const dataset = datasetsMap.get(rt.Dataset_name);
     if (dataset) {
+      addLog(`[CatalogStore-Transform] Processing table '${rt.TABLE_NAME}' for dataset '${rt.Dataset_name}'.`);
       const tableColumns: EnrichedColumn[] = [];
       const uniqueColumnTracker = new Set<string>();
+      let columnsFoundForThisTable = 0;
 
       (raw.columns || [])
-        .filter(rc => rc && rc.TABLE_NAME === rt.TABLE_NAME)
+        .filter(rc => rc && rc.TABLE_NAME === rt.TABLE_NAME) // Filter relevant columns for current table
         .forEach(rc => {
+          columnsFoundForThisTable++;
           if (!rc.COLUMN_NAME) {
             const colWarningMsg = `[CatalogStore-Transform] Skipping raw column due to missing COLUMN_NAME for table ${rt.TABLE_NAME}: ${JSON.stringify(rc)}`;
             console.warn(colWarningMsg);
@@ -181,6 +184,7 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
             location: rc.location ?? null,
           });
         });
+      addLog(`[CatalogStore-Transform] Table '${rt.TABLE_NAME}': Found ${columnsFoundForThisTable} potential raw columns, added ${tableColumns.length} enriched columns.`);
       
       const primaryKeysString = tableColumns.filter(c => c.isPrimaryKey).map(c => c.name).join(', ') || null;
       const foreignKeysString = tableColumns.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
@@ -204,14 +208,23 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
         columns: tableColumns,
       });
     } else {
-      const tableDsWarn = `[CatalogStore-Transform] Raw table ${rt.TABLE_NAME} refers to non-existent dataset ${rt.Dataset_name}`;
+      const tableDsWarn = `[CatalogStore-Transform] Raw table '${rt.TABLE_NAME}' (Dataset_name: '${rt.Dataset_name}') references a dataset not found in datasetsMap. Skipping this table.`;
       console.warn(tableDsWarn);
       addLog(tableDsWarn);
     }
   });
   addLog(`[CatalogStore-Transform] Finished processing raw tables and columns.`);
+  
+  // Log summary for each dataset
+  datasetsMap.forEach(ds => {
+    addLog(`[CatalogStore-Transform-Summary] Dataset: ${ds.name}, Tables: ${ds.tables.length}`);
+    if (ds.tables.length > 0) {
+        addLog(`[CatalogStore-Transform-Summary] First table in ${ds.name}: ${ds.tables[0].name}, Columns: ${ds.tables[0].columns.length}`);
+    }
+  });
+
   const finalCatalog = { datasets: Array.from(datasetsMap.values()) };
-  addLog(`[CatalogStore-Transform] Transformation complete. Catalog has ${finalCatalog.datasets.length} datasets.`);
+  addLog(`[CatalogStore-Transform] Transformation complete. Final catalog has ${finalCatalog.datasets.length} datasets.`);
   return finalCatalog;
 }
 
