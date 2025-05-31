@@ -14,6 +14,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import type { RawTable, RawColumn } from '@/types';
+import { addLog } from '@/lib/log-store';
 
 
 // Input Schemas (Raw data for the table and its columns)
@@ -119,26 +120,31 @@ export type EnrichTableOutput = z.infer<typeof EnrichTableOutputSchema>;
 
 
 export async function enrichSingleTable(input: EnrichTableInput): Promise<EnrichTableOutput> {
-  console.log('[enrichSingleTableFlow] Input received for table processing:', JSON.stringify({
-    datasetName: input.datasetContext.Dataset_name,
-    tableName: input.tableToEnrich.TABLE_NAME,
-    columnCount: input.columnsToEnrich.length,
-    otherTableCount: input.otherTableNamesInDataset?.length || 0,
-    firstColumnOriginalDescription: input.columnsToEnrich[0]?.column_description
-  }, null, 2));
+  addLog(`[Genkit Flow: enrichSingleTable] Invoked for table: ${input.tableToEnrich.TABLE_NAME} in dataset: ${input.datasetContext.Dataset_name}. Columns: ${input.columnsToEnrich.length}, Other tables: ${input.otherTableNamesInDataset?.length || 0}`);
+  // console.log('[enrichSingleTableFlow] Input received for table processing:', JSON.stringify({
+  //   datasetName: input.datasetContext.Dataset_name,
+  //   tableName: input.tableToEnrich.TABLE_NAME,
+  //   columnCount: input.columnsToEnrich.length,
+  //   otherTableCount: input.otherTableNamesInDataset?.length || 0,
+  //   firstColumnOriginalDescription: input.columnsToEnrich[0]?.column_description
+  // }, null, 2));
 
   try {
     const flowResult = await enrichTableFlow(input);
     if (!flowResult) {
         const errorMsg = `EnrichTableFlow returned null or undefined for table ${input.tableToEnrich.TABLE_NAME}. This indicates an issue within the flow.`;
-        console.error(`[enrichSingleTable Function Error] ${errorMsg}`);
+        addLog(`[Genkit Flow: enrichSingleTable] Error: ${errorMsg}`);
+        // console.error(`[enrichSingleTable Function Error] ${errorMsg}`);
         throw new Error(errorMsg);
     }
-    console.log(`[enrichSingleTableFlow] Successfully processed table: ${input.tableToEnrich.TABLE_NAME}. Output snippet:`, JSON.stringify(flowResult, null, 2).substring(0,1000) + '...');
+    addLog(`[Genkit Flow: enrichSingleTable] Successfully completed for table ${input.tableToEnrich.TABLE_NAME}. Output (table desc): ${flowResult.enrichedTable.Description?.substring(0,100)}...`);
+    // console.log(`[enrichSingleTableFlow] Successfully processed table: ${input.tableToEnrich.TABLE_NAME}. Output snippet:`, JSON.stringify(flowResult, null, 2).substring(0,1000) + '...');
     return flowResult;
   } catch (error) {
-    console.error(`[enrichSingleTable Function Error] Failed to enrich table ${input.tableToEnrich.TABLE_NAME} during flow execution. Input that caused error:`, JSON.stringify(input, null, 2).substring(0,1000) + "...");
-    console.error(`[enrichSingleTable Function Error] Detailed error:`, error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    addLog(`[Genkit Flow: enrichSingleTable] Error for table ${input.tableToEnrich.TABLE_NAME}: ${errorMessage}`);
+    // console.error(`[enrichSingleTable Function Error] Failed to enrich table ${input.tableToEnrich.TABLE_NAME} during flow execution. Input that caused error:`, JSON.stringify(input, null, 2).substring(0,1000) + "...");
+    // console.error(`[enrichSingleTable Function Error] Detailed error:`, error);
     throw error; 
   }
 }
@@ -214,6 +220,7 @@ const enrichTableFlow = ai.defineFlow(
     outputSchema: EnrichTableOutputSchema, // Strict schema for the flow's final output
   },
   async (input): Promise<EnrichTableOutput> => {
+    addLog(`[Genkit Flow Step: enrichTableFlow (internal)] Input for table ${input.tableToEnrich.TABLE_NAME}: Columns - ${input.columnsToEnrich.length}`);
     const sanitizedTable = {
       TABLE_NAME: input.tableToEnrich.TABLE_NAME,
       Dataset_name: input.tableToEnrich.Dataset_name,
@@ -222,24 +229,23 @@ const enrichTableFlow = ai.defineFlow(
       DATABASE_NAME: input.tableToEnrich.DATABASE_NAME ?? null,
       SCHEMA_NAME: input.tableToEnrich.SCHEMA_NAME ?? null,
       OWNER: input.tableToEnrich.OWNER ?? null,
-      // PK/FK on table level are not sent to AI, derived from columns.
       CREATED_DATE: input.tableToEnrich.CREATED_DATE ?? null,
       UPDATED_DATE: input.tableToEnrich.UPDATED_DATE ?? null,
       Row_count: input.tableToEnrich.Row_count ?? null,
-      Description: input.tableToEnrich.Description || "", // Send empty string if null
-      Table_tags: input.tableToEnrich.Table_tags || "",   // Send empty string if null
-      Sensitivity: input.tableToEnrich.Sensitivity || "unknown", // Default if null
+      Description: input.tableToEnrich.Description || "", 
+      Table_tags: input.tableToEnrich.Table_tags || "",   
+      Sensitivity: input.tableToEnrich.Sensitivity || "unknown", 
     };
 
     const sanitizedColumns = (input.columnsToEnrich || []).map(c => ({
       TABLE_NAME: input.tableToEnrich.TABLE_NAME, 
       COLUMN_NAME: c.COLUMN_NAME,
       DATA_TYPE: c.DATA_TYPE ?? null,
-      PRIMARY_KEY: c.PRIMARY_KEY || null, // Send original PK status or null
-      FOREIGN_KEY: c.FOREIGN_KEY || null, // Send original FK status or null
-      column_description: c.column_description || "", // Send empty string if null
-      Column_tags: c.Column_tags || "",       // Send empty string if null
-      Sensitivity: c.Sensitivity || "unknown",   // Default if null
+      PRIMARY_KEY: c.PRIMARY_KEY || null, 
+      FOREIGN_KEY: c.FOREIGN_KEY || null, 
+      column_description: c.column_description || "", 
+      Column_tags: c.Column_tags || "",       
+      Sensitivity: c.Sensitivity || "unknown",   
       location: c.location ?? null,
     }));
 
@@ -253,40 +259,42 @@ const enrichTableFlow = ai.defineFlow(
       otherTableNamesInDataset: input.otherTableNamesInDataset || [],
     };
 
-    console.log('[enrichTableFlow] Exact Sanitized Input to AI Prompt:', JSON.stringify({
-        datasetName: sanitizedInput.datasetContext.Dataset_name,
-        tableName: sanitizedInput.tableToEnrich.TABLE_NAME,
-        tableOriginalDescriptionForPrompt: sanitizedInput.tableToEnrich.Description,
-        tableOriginalTagsForPrompt: sanitizedInput.tableToEnrich.Table_tags,
-        columnCount: sanitizedInput.columnsToEnrich.length,
-        firstColumnName: sanitizedInput.columnsToEnrich[0]?.COLUMN_NAME,
-        firstColumnOriginalDescriptionForPrompt: sanitizedInput.columnsToEnrich[0]?.column_description,
-        firstColumnOriginalTagsForPrompt: sanitizedInput.columnsToEnrich[0]?.Column_tags,
-    }, null, 2));
+    // console.log('[enrichTableFlow] Exact Sanitized Input to AI Prompt:', JSON.stringify({
+    //     datasetName: sanitizedInput.datasetContext.Dataset_name,
+    //     tableName: sanitizedInput.tableToEnrich.TABLE_NAME,
+    //     tableOriginalDescriptionForPrompt: sanitizedInput.tableToEnrich.Description,
+    //     tableOriginalTagsForPrompt: sanitizedInput.tableToEnrich.Table_tags,
+    //     columnCount: sanitizedInput.columnsToEnrich.length,
+    //     firstColumnName: sanitizedInput.columnsToEnrich[0]?.COLUMN_NAME,
+    //     firstColumnOriginalDescriptionForPrompt: sanitizedInput.columnsToEnrich[0]?.column_description,
+    //     firstColumnOriginalTagsForPrompt: sanitizedInput.columnsToEnrich[0]?.Column_tags,
+    // }, null, 2));
 
-    let aiModelOutput; // This will be of type z.infer<typeof EnrichTableAIOutputSchema>
+    let aiModelOutput; 
     try {
-      const {output} = await prompt(sanitizedInput); // AI call, parsed by Genkit using EnrichTableAIOutputSchema
+      addLog(`[Genkit Prompt: enrichSingleTablePrompt] Invoking for table ${input.tableToEnrich.TABLE_NAME}. Sanitized input (table desc): ${sanitizedInput.tableToEnrich.Description.substring(0,50)}...`);
+      const {output} = await prompt(sanitizedInput); 
       aiModelOutput = output;
+      if (!aiModelOutput || !aiModelOutput.enrichedTable || !Array.isArray(aiModelOutput.enrichedColumns)) {
+        addLog(`[Genkit Prompt: enrichSingleTablePrompt] Error for table ${input.tableToEnrich.TABLE_NAME}: Malformed response. Output: ${JSON.stringify(aiModelOutput).substring(0,300)}`);
+        throw new Error('AI enrichment for table returned no output or malformed response envelope.');
+      }
+      addLog(`[Genkit Prompt: enrichSingleTablePrompt] Response for ${input.tableToEnrich.TABLE_NAME}: Table desc - ${aiModelOutput.enrichedTable.Description?.substring(0,50)}..., Columns enriched: ${aiModelOutput.enrichedColumns.length}`);
     } catch (error) {
-      console.error(`[enrichTableFlow] Error calling AI prompt for table ${input.tableToEnrich.TABLE_NAME}:`, error);
-      throw new Error(`AI prompt call failed for table ${input.tableToEnrich.TABLE_NAME}: ${error instanceof Error ? error.message : String(error)}`);
+      const promptErrorMsg = error instanceof Error ? error.message : String(error);
+      addLog(`[Genkit Prompt: enrichSingleTablePrompt] Execution Error for table ${input.tableToEnrich.TABLE_NAME}: ${promptErrorMsg}`);
+      // console.error(`[enrichTableFlow] Error calling AI prompt for table ${input.tableToEnrich.TABLE_NAME}:`, error);
+      throw new Error(`AI prompt call failed for table ${input.tableToEnrich.TABLE_NAME}: ${promptErrorMsg}`);
     }
 
-    if (!aiModelOutput || !aiModelOutput.enrichedTable || !Array.isArray(aiModelOutput.enrichedColumns)) {
-      console.error('[enrichTableFlow] AI enrichment for table returned no output or malformed response envelope (e.g. missing enrichedTable or enrichedColumns). Output received:', aiModelOutput);
-      throw new Error('AI enrichment for table returned no output or malformed response envelope.');
-    }
+    // console.log(`[enrichTableFlow] Raw AI Output (parsed by Genkit against Permissive Schema) for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(aiModelOutput, null, 2).substring(0, 1000) + "...");
 
-    console.log(`[enrichTableFlow] Raw AI Output (parsed by Genkit against Permissive Schema) for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(aiModelOutput, null, 2).substring(0, 1000) + "...");
-
-    // --- Normalization Step: Convert AI's (permissive) output to the strict flow output schema ---
-    const originalInputTable = input.tableToEnrich; // The non-sanitized version for true original values
+    const originalInputTable = input.tableToEnrich; 
     const aiProvidedTable = aiModelOutput.enrichedTable;
 
     const finalEnrichedTableData: z.infer<typeof EnrichedTableDataSchema> = {
-        TABLE_NAME: originalInputTable.TABLE_NAME, // Must come from original input
-        Dataset_name: originalInputTable.Dataset_name, // Must come from original input
+        TABLE_NAME: originalInputTable.TABLE_NAME, 
+        Dataset_name: originalInputTable.Dataset_name, 
         Description: aiProvidedTable.Description ?? originalInputTable.Description ?? null,
         Table_tags: aiProvidedTable.Table_tags ?? originalInputTable.Table_tags ?? null,
         Sensitivity: aiProvidedTable.Sensitivity ?? originalInputTable.Sensitivity ?? 'unknown',
@@ -303,25 +311,24 @@ const enrichTableFlow = ai.defineFlow(
     };
 
     const finalNormalizedColumns: z.infer<typeof EnrichedColumnDataSchema>[] = [];
-    // Iterate over original input columns to ensure all are present and correctly merged
-    for (const originalInputCol of input.columnsToEnrich) { // Iterate over the original, non-sanitized columns
+    for (const originalInputCol of input.columnsToEnrich) { 
         const aiCol = aiModelOutput.enrichedColumns.find(c => c.COLUMN_NAME === originalInputCol.COLUMN_NAME && c.TABLE_NAME === originalInputCol.TABLE_NAME);
 
         let pkValue: string | null = null;
         const aiPk = aiCol?.PRIMARY_KEY;
         if (typeof aiPk === 'boolean') pkValue = aiPk ? 'true' : 'false';
         else if (typeof aiPk === 'string' && (aiPk.toLowerCase() === 'true' || aiPk.toLowerCase() === 'false')) pkValue = aiPk.toLowerCase();
-        else pkValue = originalInputCol.PRIMARY_KEY ?? null; // Fallback to original
+        else pkValue = originalInputCol.PRIMARY_KEY ?? null; 
 
         let fkValue: string | null = null;
         const aiFk = aiCol?.FOREIGN_KEY;
         if (typeof aiFk === 'boolean') fkValue = aiFk ? 'true' : 'false';
         else if (typeof aiFk === 'string' && (aiFk.toLowerCase() === 'true' || aiFk.toLowerCase() === 'false')) fkValue = aiFk.toLowerCase();
-        else fkValue = originalInputCol.FOREIGN_KEY ?? null; // Fallback to original
+        else fkValue = originalInputCol.FOREIGN_KEY ?? null; 
         
         const normalizedCol: z.infer<typeof EnrichedColumnDataSchema> = {
-            TABLE_NAME: originalInputCol.TABLE_NAME, // Must be from original input
-            COLUMN_NAME: originalInputCol.COLUMN_NAME, // Must be from original input
+            TABLE_NAME: originalInputCol.TABLE_NAME, 
+            COLUMN_NAME: originalInputCol.COLUMN_NAME, 
             DATA_TYPE: String(aiCol?.DATA_TYPE ?? originalInputCol.DATA_TYPE ?? null),
             location: String(aiCol?.location ?? originalInputCol.location ?? null),
             column_description: aiCol?.column_description ?? originalInputCol.column_description ?? null,
@@ -333,15 +340,14 @@ const enrichTableFlow = ai.defineFlow(
         finalNormalizedColumns.push(normalizedCol);
     }
     
-    // Ensure no columns were dropped if AI didn't return them
     if (finalNormalizedColumns.length !== input.columnsToEnrich.length) {
-        console.warn(`[enrichTableFlow] Column count mismatch for table ${input.tableToEnrich.TABLE_NAME}. Input: ${input.columnsToEnrich.length}, AI+Normalized: ${finalNormalizedColumns.length}. This might indicate AI dropped columns or naming issues.`);
-        // Potentially re-iterate input.columnsToEnrich and add any missing ones using only original data
+        addLog(`[Genkit Flow Step: enrichTableFlow (internal)] Column count mismatch for table ${input.tableToEnrich.TABLE_NAME}. Input: ${input.columnsToEnrich.length}, AI+Normalized: ${finalNormalizedColumns.length}.`);
+        // console.warn(`[enrichTableFlow] Column count mismatch for table ${input.tableToEnrich.TABLE_NAME}. Input: ${input.columnsToEnrich.length}, AI+Normalized: ${finalNormalizedColumns.length}. This might indicate AI dropped columns or naming issues.`);
         input.columnsToEnrich.forEach(originalCol => {
             if (!finalNormalizedColumns.some(nc => nc.COLUMN_NAME === originalCol.COLUMN_NAME && nc.TABLE_NAME === originalCol.TABLE_NAME)) {
-                console.log(`[enrichTableFlow] Adding back missing column from original input: ${originalCol.TABLE_NAME}.${originalCol.COLUMN_NAME}`);
+                // console.log(`[enrichTableFlow] Adding back missing column from original input: ${originalCol.TABLE_NAME}.${originalCol.COLUMN_NAME}`);
                 finalNormalizedColumns.push({
-                    ...originalCol, // Spread all fields from original RawColumn
+                    ...originalCol, 
                     PRIMARY_KEY: String(originalCol.PRIMARY_KEY).toLowerCase() === 'true' ? 'true' : (String(originalCol.PRIMARY_KEY).toLowerCase() === 'false' ? 'false' : null),
                     FOREIGN_KEY: String(originalCol.FOREIGN_KEY).toLowerCase() === 'true' ? 'true' : (String(originalCol.FOREIGN_KEY).toLowerCase() === 'false' ? 'false' : null),
                 });
@@ -349,13 +355,13 @@ const enrichTableFlow = ai.defineFlow(
         });
     }
 
-
     const finalOutput: EnrichTableOutput = {
         enrichedTable: finalEnrichedTableData,
         enrichedColumns: finalNormalizedColumns,
     };
 
-    console.log(`[enrichTableFlow] Processed & Normalized Output (to match strict schema) for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(finalOutput, null, 2).substring(0, 500) + "...");
+    addLog(`[Genkit Flow Step: enrichTableFlow (internal)] Output for table ${input.tableToEnrich.TABLE_NAME}: Table desc - ${finalOutput.enrichedTable.Description?.substring(0,50)}..., Columns: ${finalOutput.enrichedColumns.length}`);
+    // console.log(`[enrichTableFlow] Processed & Normalized Output (to match strict schema) for table ${input.tableToEnrich.TABLE_NAME}:`, JSON.stringify(finalOutput, null, 2).substring(0, 500) + "...");
     return finalOutput;
   }
 );

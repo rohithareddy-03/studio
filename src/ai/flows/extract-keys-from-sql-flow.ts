@@ -11,6 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z}
 from 'genkit';
+import { addLog } from '@/lib/log-store';
 
 export const ExtractKeysFromSqlInputSchema = z.object({
   sqlQuery: z.string().describe('The SQL query (e.g., CREATE TABLE, ALTER TABLE, or analytical query with joins) to analyze for key structures.'),
@@ -40,15 +41,17 @@ export type ExtractKeysFromSqlOutput = z.infer<typeof ExtractKeysFromSqlOutputSc
 
 
 export async function extractKeysFromSql(input: ExtractKeysFromSqlInput): Promise<ExtractKeysFromSqlOutput> {
-  console.log('[extractKeysFromSql wrapper] Input received:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
+  addLog(`[Genkit Flow: extractKeysFromSql] Invoked for dataset: ${input.datasetName}, table: ${input.tableName || 'N/A'}. SQL: ${input.sqlQuery.substring(0,100)}...`);
+  // console.log('[extractKeysFromSql wrapper] Input received:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
   try {
     const result = await extractKeysFlow(input);
-    console.log('[extractKeysFromSql wrapper] Flow Output (result):', JSON.stringify(result, null, 2).substring(0, 800) + "...");
+    addLog(`[Genkit Flow: extractKeysFromSql] Successfully completed. Summary: ${result.analysisSummary.substring(0,100)}... PKs: ${result.primaryKeys.length}, FKs: ${result.foreignKeys.length}`);
+    // console.log('[extractKeysFromSql wrapper] Flow Output (result):', JSON.stringify(result, null, 2).substring(0, 800) + "...");
     return result;
   } catch (error) {
-    console.error('[extractKeysFromSql wrapper] Error during flow execution:', error);
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during SQL key extraction.";
-    // Return a structured error within the expected output schema
+    addLog(`[Genkit Flow: extractKeysFromSql] Error: ${errorMessage}. Input SQL: ${input.sqlQuery.substring(0,100)}...`);
+    // console.error('[extractKeysFromSql wrapper] Error during flow execution:', error);
     return {
       primaryKeys: [],
       foreignKeys: [],
@@ -109,26 +112,34 @@ const extractKeysFlow = ai.defineFlow(
     outputSchema: ExtractKeysFromSqlOutputSchema,
   },
   async (input) => {
-    console.log('[extractKeysFlow] Input to AI prompt:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
-    const { output } = await prompt(input);
-    console.log('[extractKeysFlow] Raw output from AI prompt:', JSON.stringify(output, null, 2).substring(0, 800) + "...");
-
-    if (!output) {
-      console.warn('[extractKeysFlow] AI analysis returned no output object.');
-      return {
-        primaryKeys: [],
-        foreignKeys: [],
-        analysisSummary: "AI analysis returned no output.",
-        warnings: ["AI returned no output."],
-      };
+    addLog(`[Genkit Flow Step: extractKeysFlow (internal)] Input SQL: ${input.sqlQuery.substring(0,200)}... Context: ${input.existingSchemaContext?.substring(0,100)}...`);
+    // console.log('[extractKeysFlow] Input to AI prompt:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
+    
+    let outputFromPrompt;
+    try {
+      const result = await prompt(input);
+      outputFromPrompt = result.output;
+      if (!outputFromPrompt) {
+        addLog(`[Genkit Prompt: extractKeysFromSqlPrompt] Error: Returned no output object.`);
+        throw new Error('AI SQL key analysis returned no output.');
+      }
+      addLog(`[Genkit Prompt: extractKeysFromSqlPrompt] Response summary: ${outputFromPrompt.analysisSummary.substring(0,100)}... PKs: ${outputFromPrompt.primaryKeys?.length || 0}, FKs: ${outputFromPrompt.foreignKeys?.length || 0}`);
+    } catch (e) {
+      const promptError = e instanceof Error ? e.message : String(e);
+      addLog(`[Genkit Prompt: extractKeysFromSqlPrompt] Execution Error: ${promptError}`);
+      throw e;
     }
-    // Ensure arrays are always present, even if AI omits them (Zod default helps, but good to be defensive)
-    return {
-        primaryKeys: output.primaryKeys || [],
-        foreignKeys: output.foreignKeys || [],
-        analysisSummary: output.analysisSummary || "AI provided no analysis summary.",
-        warnings: output.warnings || [],
+
+    // console.log('[extractKeysFlow] Raw output from AI prompt:', JSON.stringify(outputFromPrompt, null, 2).substring(0, 800) + "...");
+
+    const finalOutput = {
+        primaryKeys: outputFromPrompt.primaryKeys || [],
+        foreignKeys: outputFromPrompt.foreignKeys || [],
+        analysisSummary: outputFromPrompt.analysisSummary || "AI provided no analysis summary.",
+        warnings: outputFromPrompt.warnings || [],
     };
+    addLog(`[Genkit Flow Step: extractKeysFlow (internal)] Final output summary: ${finalOutput.analysisSummary.substring(0,100)}...`);
+    return finalOutput;
   }
 );
 

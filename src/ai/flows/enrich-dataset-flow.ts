@@ -11,6 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import type { RawDataset } from '@/types';
+import { addLog } from '@/lib/log-store';
 
 const EnrichDatasetInputSchema = z.object({
   datasetToEnrich: z.object({
@@ -32,7 +33,16 @@ const EnrichDatasetOutputSchema = z.object({
 export type EnrichDatasetOutput = z.infer<typeof EnrichDatasetOutputSchema>;
 
 export async function enrichSingleDataset(input: EnrichDatasetInput): Promise<EnrichDatasetOutput> {
-  return enrichDatasetFlow(input);
+  addLog(`[Genkit Flow: enrichSingleDataset] Invoked for dataset: ${input.datasetToEnrich.Dataset_name}. Tables for context: ${input.tableNamesInDataset.length}`);
+  try {
+    const result = await enrichDatasetFlow(input);
+    addLog(`[Genkit Flow: enrichSingleDataset] Successfully completed for ${input.datasetToEnrich.Dataset_name}. Output: ${JSON.stringify(result).substring(0,200)}...`);
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    addLog(`[Genkit Flow: enrichSingleDataset] Error for dataset ${input.datasetToEnrich.Dataset_name}: ${errorMessage}`);
+    throw error;
+  }
 }
 
 const prompt = ai.definePrompt({
@@ -73,6 +83,7 @@ const enrichDatasetFlow = ai.defineFlow(
     outputSchema: EnrichDatasetOutputSchema,
   },
   async (input) => {
+    addLog(`[Genkit Flow Step: enrichDatasetFlow (internal)] Input for dataset ${input.datasetToEnrich.Dataset_name}: ${JSON.stringify(input.datasetToEnrich).substring(0,200)}...`);
     const sanitizedInput = {
       ...input,
       datasetToEnrich: {
@@ -81,15 +92,29 @@ const enrichDatasetFlow = ai.defineFlow(
         Tags: input.datasetToEnrich.Tags || "",
       }
     };
-    const {output} = await prompt(sanitizedInput);
-    if (!output) {
-      throw new Error('AI enrichment for dataset returned no output.');
+
+    let outputFromPrompt;
+    try {
+      const result = await prompt(sanitizedInput);
+      outputFromPrompt = result.output;
+      if (!outputFromPrompt) {
+        addLog(`[Genkit Prompt: enrichDatasetPrompt] Error for dataset ${input.datasetToEnrich.Dataset_name}: Returned no output object.`);
+        throw new Error('AI enrichment for dataset returned no output.');
+      }
+      addLog(`[Genkit Prompt: enrichDatasetPrompt] Response for ${input.datasetToEnrich.Dataset_name}: ${JSON.stringify(outputFromPrompt).substring(0,200)}...`);
+    } catch (e) {
+      const promptError = e instanceof Error ? e.message : String(e);
+      addLog(`[Genkit Prompt: enrichDatasetPrompt] Execution Error for ${input.datasetToEnrich.Dataset_name}: ${promptError}`);
+      throw e;
     }
-    // Ensure Dataset_name is returned correctly, as it's key for mapping
-    return {
+    
+    const finalOutput = {
         Dataset_name: input.datasetToEnrich.Dataset_name, 
-        Dataset_description: output.Dataset_description,
-        Tags: output.Tags,
+        Dataset_description: outputFromPrompt.Dataset_description,
+        Tags: outputFromPrompt.Tags,
     };
+    addLog(`[Genkit Flow Step: enrichDatasetFlow (internal)] Output for ${input.datasetToEnrich.Dataset_name}: ${JSON.stringify(finalOutput).substring(0,200)}...`);
+    return finalOutput;
   }
 );
+
