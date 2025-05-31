@@ -1,10 +1,11 @@
-
 // src/app/admin/page.tsx
 "use client";
 
 import { FileUpload } from '@/components/admin/FileUpload';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShieldCheck } from 'lucide-react';
+import { Card, CardDescription, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ShieldCheck, BookOpenText, Terminal } from 'lucide-react';
+import Link from 'next/link';
 
 export default function AdminPage() {
   return (
@@ -18,12 +19,32 @@ export default function AdminPage() {
             </CardTitle>
           </div>
           <CardDescription className="text-base text-foreground/80">
-            Manage your data catalog: upload new data, re-enrich metadata, and download the current catalog.
+            Manage your data catalog, view API documentation for the external CSV-based catalog server, and perform other administrative tasks.
           </CardDescription>
         </CardHeader>
       </Card>
 
       <FileUpload />
+
+      <Card className="bg-card/80 backdrop-blur-sm border-border/60 shadow-xl">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold text-primary flex items-center gap-3">
+            <BookOpenText size={28} /> External Catalog Server
+          </CardTitle>
+          <CardDescription>
+            View API documentation for the standalone Node.js server that reads catalog data from CSV files.
+            This server runs independently on port 3001.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/admin/api-docs" passHref>
+            <Button variant="outline" className="w-full h-11 text-base rounded-lg">
+              <Terminal className="mr-2 h-5 w-5" />
+              View API Documentation & Test Commands
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }
