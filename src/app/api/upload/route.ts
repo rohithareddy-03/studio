@@ -99,17 +99,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Failed to save uploaded file: ${saveError.message}` }, { status: 500 });
     }
 
-    // Now that the file is saved, let catalog-store handle reading it and initializing
+    addLog("Upload API: Calling processUploadedFileAndInitializeCatalog from disk.");
     const newCatalogData = await processUploadedFileAndInitializeCatalog();
-    addLog("Upload API: Catalog re-initialized from newly uploaded and saved file.");
+    // Log details about the catalog data received by the API route
+    addLog(`Upload API: Catalog data received from processUploadedFileAndInitializeCatalog. Datasets count: ${newCatalogData?.datasets?.length ?? 'undefined/null'}. First dataset name (if any): ${newCatalogData?.datasets?.[0]?.name ?? 'N/A'}`);
 
-    if (!newCatalogData || newCatalogData.datasets.length === 0) {
-        // This might happen if the excel file was empty or malformed
-        // processUploadedFileAndInitializeCatalog would log details
-        addLog("Upload API Error: Catalog is empty after processing the uploaded file. Check file contents and logs.");
+
+    if (!newCatalogData || !newCatalogData.datasets || newCatalogData.datasets.length === 0) {
+        addLog("Upload API Error: Catalog is empty after processing the uploaded file. Check file contents and previous logs in catalog-store.");
         return NextResponse.json({ error: 'Uploaded file processed, but resulted in an empty catalog. Please check the file format and content.' }, { status: 400 });
     }
     
+    addLog("Upload API: Catalog re-initialized successfully from newly uploaded file.");
     return NextResponse.json({ message: 'File uploaded, saved, and catalog processed successfully.', catalog: newCatalogData }, { status: 200 });
 
   } catch (error: any) {
