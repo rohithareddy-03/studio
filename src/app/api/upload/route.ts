@@ -2,7 +2,7 @@
 // src/app/api/upload/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
-import { initializeCatalog, processUploadedFileAndInitializeCatalog, storeRawDataForEnrichment } from '@/lib/catalog-store';
+import { processAndInitializeCatalogFromBuffer, storeRawDataForEnrichment } from '@/lib/catalog-store'; // Changed import
 import type { RawDataset, RawTable, RawColumn } from '@/types';
 import { addLog } from '@/lib/log-store';
 import fs from 'fs';
@@ -30,8 +30,6 @@ const ALL_COLUMN_KEYS: (keyof RawColumn)[] = ['TABLE_NAME', 'COLUMN_NAME', 'DATA
 
 function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName: string): string | null {
   if (!sheetData || sheetData.length === 0) {
-    // If sheet is empty but optional (like tables or columns), it's not an error.
-    // If sheet is 'datasets' and empty, it IS an error (handled later).
     return null;
   }
   const actualHeaders = Object.keys(sheetData[0]).map(h => h.toLowerCase());
@@ -56,7 +54,7 @@ function transformToCanonical<T extends object>(parsedData: any[], allCanonicalK
       if (excelKeyFound && obj[excelKeyFound] !== null && obj[excelKeyFound] !== undefined) {
         (newObj as any)[canonicalKey] = obj[excelKeyFound];
       } else {
-        (newObj as any)[canonicalKey] = null; // Ensure all keys are present, defaulting to null if missing or empty in Excel
+        (newObj as any)[canonicalKey] = null; 
       }
     }
     return newObj as T;
@@ -87,10 +85,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid file type. Only .xlsx is allowed.' }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
+    const bytes = await file.arrayBuffer(); // Keep the buffer in memory
     ensureDataStoreDirectoryExists();
 
     try {
+      // Save the file to disk
       fs.writeFileSync(CATALOG_XLSX_FILE_PATH, Buffer.from(bytes));
       addLog(`Upload API: File successfully saved to ${CATALOG_XLSX_FILE_PATH}`);
     } catch (saveError: any) {
@@ -99,18 +98,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Failed to save uploaded file: ${saveError.message}` }, { status: 500 });
     }
 
-    addLog("Upload API: Calling processUploadedFileAndInitializeCatalog from disk.");
-    const newCatalogData = await processUploadedFileAndInitializeCatalog();
-    // Log details about the catalog data received by the API route
-    addLog(`Upload API: Catalog data received from processUploadedFileAndInitializeCatalog. Datasets count: ${newCatalogData?.datasets?.length ?? 'undefined/null'}. First dataset name (if any): ${newCatalogData?.datasets?.[0]?.name ?? 'N/A'}`);
+    addLog("Upload API: Calling processAndInitializeCatalogFromBuffer with file bytes.");
+    // Process the catalog directly from the buffer
+    const newCatalogData = processAndInitializeCatalogFromBuffer(bytes); 
+    
+    addLog(`Upload API: Catalog data received from processAndInitializeCatalogFromBuffer. Datasets count: ${newCatalogData?.datasets?.length ?? 'undefined/null'}. First dataset name (if any): ${newCatalogData?.datasets?.[0]?.name ?? 'N/A'}`);
 
 
     if (!newCatalogData || !newCatalogData.datasets || newCatalogData.datasets.length === 0) {
-        addLog("Upload API Error: Catalog is empty after processing the uploaded file. Check file contents and previous logs in catalog-store.");
+        addLog("Upload API Error: Catalog is empty after processing the uploaded file from buffer. Check file contents and previous logs in catalog-store.");
         return NextResponse.json({ error: 'Uploaded file processed, but resulted in an empty catalog. Please check the file format and content.' }, { status: 400 });
     }
     
-    addLog("Upload API: Catalog re-initialized successfully from newly uploaded file.");
+    addLog("Upload API: Catalog re-initialized successfully from newly uploaded file (via buffer).");
     return NextResponse.json({ message: 'File uploaded, saved, and catalog processed successfully.', catalog: newCatalogData }, { status: 200 });
 
   } catch (error: any) {

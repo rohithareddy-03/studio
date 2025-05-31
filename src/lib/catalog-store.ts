@@ -23,41 +23,47 @@ function ensureDataStoreDirectoryExists() {
   }
 }
 
-// Helper to read and parse catalog.xlsx
-function readCatalogFromExcel(): { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] } | null {
+// Helper to parse a workbook object into raw data
+function parseWorkbookToRawData(workbook: XLSX.WorkBook): { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] } | null {
+  addLog(`[CatalogStore-ParseWorkbook] Parsing workbook. Sheet names: ${JSON.stringify(workbook.SheetNames)}`);
+
+  const rawDatasetsSheet = workbook.Sheets['datasets'];
+  const rawTablesSheet = workbook.Sheets['tables'];
+  const rawColumnsSheet = workbook.Sheets['columns'];
+
+  if (!rawDatasetsSheet) {
+    addLog("[CatalogStore-ParseWorkbook] Excel workbook is missing 'datasets' sheet. Cannot load.");
+    return null;
+  }
+  addLog("[CatalogStore-ParseWorkbook] 'datasets' sheet found.");
+
+  const datasets = XLSX.utils.sheet_to_json<RawDataset>(rawDatasetsSheet, { defval: null });
+  addLog(`[CatalogStore-ParseWorkbook] XLSX.utils.sheet_to_json for 'datasets' returned ${datasets ? datasets.length : 'null/undefined'} items. Preview: ${JSON.stringify(datasets ? datasets.slice(0, 2) : [])}`);
+
+  if (!datasets || datasets.length === 0) {
+    addLog("[CatalogStore-ParseWorkbook] Parsed 'datasets' sheet, but it resulted in an empty array or null. Critical data missing. Returning null.");
+    return null;
+  }
+
+  const tables = rawTablesSheet ? XLSX.utils.sheet_to_json<RawTable>(rawTablesSheet, { defval: null }) : [];
+  addLog(`[CatalogStore-ParseWorkbook] Raw tables parsed from sheet (first 2 items): ${JSON.stringify(tables.slice(0, 2))}`);
+  
+  const columns = rawColumnsSheet ? XLSX.utils.sheet_to_json<RawColumn>(rawColumnsSheet, { defval: null }) : [];
+  addLog(`[CatalogStore-ParseWorkbook] Raw columns parsed from sheet (first 2 items): ${JSON.stringify(columns.slice(0, 2))}`);
+  
+  addLog(`[CatalogStore-ParseWorkbook] Successfully parsed workbook. Datasets: ${datasets.length}, Tables: ${tables.length}, Columns: ${columns.length}`);
+  return { datasets, tables, columns };
+}
+
+
+// Helper to read and parse catalog.xlsx from disk
+function readCatalogFromExcelFile(): { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] } | null {
   ensureDataStoreDirectoryExists();
   if (fs.existsSync(CATALOG_XLSX_FILE_PATH)) {
     addLog(`[CatalogStore] Reading catalog from ${CATALOG_XLSX_FILE_PATH}`);
     try {
       const workbook = XLSX.readFile(CATALOG_XLSX_FILE_PATH);
-      addLog(`[CatalogStore] Workbook sheet names: ${JSON.stringify(workbook.SheetNames)}`);
-
-      const rawDatasetsSheet = workbook.Sheets['datasets'];
-      const rawTablesSheet = workbook.Sheets['tables'];
-      const rawColumnsSheet = workbook.Sheets['columns'];
-
-      if (!rawDatasetsSheet) {
-        addLog("[CatalogStore] Excel file is missing 'datasets' sheet. Cannot load.");
-        return null;
-      }
-      addLog("[CatalogStore] 'datasets' sheet found.");
-
-      const datasets = XLSX.utils.sheet_to_json<RawDataset>(rawDatasetsSheet, { defval: null });
-      addLog(`[CatalogStore] XLSX.utils.sheet_to_json for 'datasets' returned ${datasets ? datasets.length : 'null/undefined'} items. Preview: ${JSON.stringify(datasets ? datasets.slice(0, 2) : [])}`);
-
-      if (!datasets || datasets.length === 0) {
-        addLog("[CatalogStore] Parsed 'datasets' sheet, but it resulted in an empty array or null. Critical data missing. Returning null.");
-        return null;
-      }
-
-      const tables = rawTablesSheet ? XLSX.utils.sheet_to_json<RawTable>(rawTablesSheet, { defval: null }) : [];
-      addLog(`[CatalogStore] Raw tables parsed from sheet (first 2 items): ${JSON.stringify(tables.slice(0, 2))}`);
-      
-      const columns = rawColumnsSheet ? XLSX.utils.sheet_to_json<RawColumn>(rawColumnsSheet, { defval: null }) : [];
-      addLog(`[CatalogStore] Raw columns parsed from sheet (first 2 items): ${JSON.stringify(columns.slice(0, 2))}`);
-      
-      addLog(`[CatalogStore] Successfully read from Excel. Datasets: ${datasets.length}, Tables: ${tables.length}, Columns: ${columns.length}`);
-      return { datasets, tables, columns };
+      return parseWorkbookToRawData(workbook);
     } catch (e: any) {
       addLog(`[CatalogStore] Error reading or parsing ${CATALOG_XLSX_FILE_PATH}: ${e.message}`);
       console.error(`[CatalogStore] Error reading or parsing ${CATALOG_XLSX_FILE_PATH}:`, e);
@@ -78,7 +84,6 @@ async function saveCatalogToExcel(): Promise<void> {
   addLog(`[CatalogStore] Attempting to save catalog to ${CATALOG_XLSX_FILE_PATH}`);
   try {
     const wb = XLSX.utils.book_new();
-    // Use existing headers from types.ts or define them explicitly for sheet generation
     const datasetHeaders = ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location'];
     const tableHeaders = ['TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME', 'OWNER', 'PRIMARY_KEYS', 'FOREIGN_KEYS', 'CREATED_DATE', 'UPDATED_DATE', 'Row_count', 'Description', 'Table_tags', 'Sensitivity'];
     const columnHeaders = ['TABLE_NAME', 'COLUMN_NAME', 'DATA_TYPE', 'PRIMARY_KEY', 'FOREIGN_KEY', 'column_description', 'Column_tags', 'Sensitivity', 'location'];
@@ -91,7 +96,7 @@ async function saveCatalogToExcel(): Promise<void> {
     XLSX.utils.book_append_sheet(wb, wsTables, 'tables');
     XLSX.utils.book_append_sheet(wb, wsColumns, 'columns');
 
-    XLSX.writeFile(wb, CATALOG_XLSX_FILE_PATH); // This is synchronous
+    XLSX.writeFile(wb, CATALOG_XLSX_FILE_PATH);
     addLog(`[CatalogStore] Successfully saved catalog to ${CATALOG_XLSX_FILE_PATH}`);
   } catch (e: any) {
     addLog(`[CatalogStore] Error saving catalog to ${CATALOG_XLSX_FILE_PATH}: ${e.message}`);
@@ -210,32 +215,58 @@ function transformRawToInitialCatalog(raw: { datasets: RawDataset[], tables: Raw
   return finalCatalog;
 }
 
-// Main function to load catalog from file into memory
+// Main function to load catalog from disk file into memory
 export function loadAndInitializeCatalogFromDisk(): CatalogData {
   addLog("[CatalogStore] loadAndInitializeCatalogFromDisk called.");
-  const rawDataFromFile = readCatalogFromExcel();
+  const rawDataFromFile = readCatalogFromExcelFile();
   if (rawDataFromFile) {
     rawDataForEnrichment = JSON.parse(JSON.stringify(rawDataFromFile)); // Deep copy
     catalog = transformRawToInitialCatalog(rawDataFromFile);
     addLog("[CatalogStore] Catalog loaded from Excel and initialized in memory.");
   } else {
-    // If file doesn't exist or is invalid, start with empty structures
     rawDataForEnrichment = { datasets: [], tables: [], columns: [] };
     catalog = { datasets: [] };
     addLog("[CatalogStore] No valid Excel file found or error reading it during loadAndInitializeCatalogFromDisk. Initialized empty catalog in memory.");
   }
-  // Ensure catalog is never null before stringifying
   return catalog ? JSON.parse(JSON.stringify(catalog)) : { datasets: [] };
 }
 
-// Called by API upload route AFTER file is saved to disk.
-// Reads the newly saved file, updates in-memory stores.
+// New function to process catalog from an in-memory buffer
+export function processAndInitializeCatalogFromBuffer(fileBuffer: ArrayBuffer): CatalogData {
+  addLog("[CatalogStore] processAndInitializeCatalogFromBuffer called.");
+  try {
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const parsedRawData = parseWorkbookToRawData(workbook);
+
+    if (parsedRawData) {
+        rawDataForEnrichment = JSON.parse(JSON.stringify(parsedRawData)); // Deep copy to global store
+        catalog = transformRawToInitialCatalog(parsedRawData); // Transform and set global catalog
+        addLog("[CatalogStore-Buffer] Catalog initialized in memory from buffer.");
+    } else {
+        rawDataForEnrichment = { datasets: [], tables: [], columns: [] };
+        catalog = { datasets: [] };
+        addLog("[CatalogStore-Buffer] Error parsing workbook from buffer or 'datasets' sheet missing/empty. Initialized empty catalog.");
+    }
+    // The file is already saved by the upload API before this function is called.
+    // No need to call saveCatalogToExcel() here.
+    return catalog ? JSON.parse(JSON.stringify(catalog)) : { datasets: [] };
+  } catch (e: any) {
+    addLog(`[CatalogStore-Buffer] Error processing Excel buffer: ${e.message}`);
+    console.error(`[CatalogStore-Buffer] Error processing Excel buffer:`, e);
+    rawDataForEnrichment = { datasets: [], tables: [], columns: [] };
+    catalog = { datasets: [] };
+    return catalog;
+  }
+}
+
+
+// Used by the API after an upload to prime the store from a file on disk.
+// DEPRECATED in favor of processAndInitializeCatalogFromBuffer for direct upload processing.
 export async function processUploadedFileAndInitializeCatalog(): Promise<CatalogData> {
-  addLog("[CatalogStore] processUploadedFileAndInitializeCatalog: Re-initializing catalog from disk after upload.");
+  addLog("[CatalogStore] processUploadedFileAndInitializeCatalog (disk-based) called. Consider using buffer-based processing for uploads.");
   return loadAndInitializeCatalogFromDisk();
 }
 
-// Used by the API after an upload to prime the store.
 // Also called when raw data is directly passed (though primary flow is now file-based)
 export async function initializeCatalog(rawD: RawDataset[], rawT: RawTable[], rawC: RawColumn[]): Promise<CatalogData> {
   addLog("[CatalogStore] initializeCatalog with provided raw data. Storing raw data and transforming for in-memory catalog.");
@@ -248,7 +279,7 @@ export async function initializeCatalog(rawD: RawDataset[], rawT: RawTable[], ra
 
 export async function enrichSingleDatasetInStore(datasetName: string): Promise<EnrichedDataset | null> {
   addLog(`[CatalogStore] enrichSingleDatasetInStore: Attempting to enrich dataset: ${datasetName}`);
-  if (!rawDataForEnrichment) { // Ensure raw data is loaded
+  if (!rawDataForEnrichment) { 
     loadAndInitializeCatalogFromDisk();
     if (!rawDataForEnrichment) {
        const noRawMsg = "[CatalogStore] enrichSingleDatasetInStore: No raw data available even after attempting load.";
@@ -285,7 +316,6 @@ export async function enrichSingleDatasetInStore(datasetName: string): Promise<E
     const enrichedOutput: EnrichDatasetOutput = await enrichSingleDataset(aiInput);
     addLog(`[CatalogStore] enrichSingleDatasetInStore: AI enrichment successful for dataset ${datasetName}.`);
 
-    // Update in-memory catalog
     const currentCatalog = catalog ? catalog : {datasets: []}
     const datasetIndexInCatalog = currentCatalog.datasets.findIndex(d => d.name === datasetName);
     if (datasetIndexInCatalog > -1) {
@@ -293,13 +323,12 @@ export async function enrichSingleDatasetInStore(datasetName: string): Promise<E
       currentCatalog.datasets[datasetIndexInCatalog].tags = enrichedOutput.Tags ?? currentCatalog.datasets[datasetIndexInCatalog].tags;
       catalog = currentCatalog;
       
-      // Update in-memory rawDataForEnrichment
       const rawDatasetIndex = rawDataForEnrichment.datasets.findIndex(d => d.Dataset_name === datasetName);
       if (rawDatasetIndex > -1) {
         rawDataForEnrichment.datasets[rawDatasetIndex].Dataset_description = enrichedOutput.Dataset_description ?? rawDataForEnrichment.datasets[rawDatasetIndex].Dataset_description;
         rawDataForEnrichment.datasets[rawDatasetIndex].Tags = enrichedOutput.Tags ?? rawDataForEnrichment.datasets[rawDatasetIndex].Tags;
       }
-      await saveCatalogToExcel(); // Persist changes
+      await saveCatalogToExcel(); 
       addLog(`[CatalogStore] enrichSingleDatasetInStore: Dataset ${datasetName} updated and saved.`);
       return currentCatalog.datasets[datasetIndexInCatalog];
     }
@@ -315,7 +344,7 @@ export async function enrichSingleDatasetInStore(datasetName: string): Promise<E
 
 export async function enrichSingleTableInStore(datasetName: string, tableName: string): Promise<EnrichedTable | null> {
   addLog(`[CatalogStore] enrichSingleTableInStore: Attempting to enrich table: ${tableName} in dataset: ${datasetName}`);
-  if (!rawDataForEnrichment || !catalog) { // Ensure data is loaded
+  if (!rawDataForEnrichment || !catalog) { 
     loadAndInitializeCatalogFromDisk();
      if (!rawDataForEnrichment || !catalog) {
        addLog("[CatalogStore] enrichSingleTableInStore: Raw data or catalog not available after load attempt.");
@@ -363,7 +392,6 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
     const enrichedColumnsFromAI = aiOutput.enrichedColumns;
     const currentTableInCatalog = datasetInCatalog.tables[tableIndexInCatalog];
     
-    // Update catalog table
     currentTableInCatalog.description = enrichedTableFromAI.Description ?? currentTableInCatalog.description;
     currentTableInCatalog.tags = enrichedTableFromAI.Table_tags ?? currentTableInCatalog.tags;
     currentTableInCatalog.sensitivity = enrichedTableFromAI.Sensitivity ?? currentTableInCatalog.sensitivity ?? 'unknown';
@@ -379,7 +407,6 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
                                      : currentTableInCatalog.rowCount;
     catalog = currentCatalog;
 
-    // Update rawTable data
     const rawTableIndex = rawDataForEnrichment.tables.findIndex(t => t.Dataset_name === datasetName && t.TABLE_NAME === tableName);
     if (rawTableIndex > -1) {
       const targetRawTable = rawDataForEnrichment.tables[rawTableIndex];
@@ -413,7 +440,6 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
       };
       updatedColumnsForCatalog.push(updatedEnrichedCol);
 
-      // Update rawColumn data
       const rawColIndex = rawDataForEnrichment.columns.findIndex(c => c.TABLE_NAME === tableName && c.COLUMN_NAME === originalInputColumn.COLUMN_NAME);
       if (rawColIndex > -1) {
         const targetRawCol = rawDataForEnrichment.columns[rawColIndex];
@@ -430,7 +456,7 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
     currentTableInCatalog.primaryKeys = updatedColumnsForCatalog.filter(c => c.isPrimaryKey).map(c => c.name).join(', ') || null;
     currentTableInCatalog.foreignKeys = updatedColumnsForCatalog.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
 
-    await saveCatalogToExcel(); // Persist changes
+    await saveCatalogToExcel(); 
     addLog(`[CatalogStore] enrichSingleTableInStore: Table ${tableName} updated and saved. Columns processed: ${updatedColumnsForCatalog.length}.`);
     return currentTableInCatalog;
 
@@ -446,9 +472,8 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
 export function getCatalog(): CatalogData {
   if (!catalog) {
     addLog("[CatalogStore] In-memory catalog is null, attempting to load from disk for getCatalog.");
-    return loadAndInitializeCatalogFromDisk(); // loadAndInitialize will set 'catalog'
+    return loadAndInitializeCatalogFromDisk(); 
   }
-  // Fallback to empty if still null (e.g., file not found and no upload yet)
   return catalog ? JSON.parse(JSON.stringify(catalog)) : { datasets: [] };
 }
 
@@ -474,13 +499,10 @@ export function getTableMetadata(datasetName: string, tableName: string): string
   return metadata;
 }
 
-// This function is mainly for the initial upload scenario.
-// It receives raw data, sets it as the current rawDataForEnrichment,
-// transforms it for the in-memory catalog, and saves it to Excel.
 export function storeRawDataForEnrichment(data: { datasets: RawDataset[], tables: RawTable[], columns: RawColumn[] }) {
   rawDataForEnrichment = JSON.parse(JSON.stringify(data));
-  catalog = transformRawToInitialCatalog(rawDataForEnrichment); // Update in-memory catalog
-  saveCatalogToExcel(); // Persist immediately
+  catalog = transformRawToInitialCatalog(rawDataForEnrichment); 
+  saveCatalogToExcel(); 
   addLog("[CatalogStore] Stored new raw data, updated in-memory catalog, and saved to Excel. Datasets: " + (data.datasets?.length || 0));
 }
 
@@ -502,7 +524,6 @@ export async function updateRawDataField(itemId: string, fieldKeyToUpdate: 'desc
   let rawDataFieldUpdated = false;
   let catalogFieldUpdated = false;
 
-  // Update rawDataForEnrichment
   if (columnName && tableName) {
     const rawCol = rawDataForEnrichment.columns.find(c => c.TABLE_NAME === tableName && c.COLUMN_NAME === columnName && rawDataForEnrichment.tables.some(t => t.TABLE_NAME === tableName && t.Dataset_name === datasetName));
     if (rawCol) {
@@ -526,7 +547,6 @@ export async function updateRawDataField(itemId: string, fieldKeyToUpdate: 'desc
     }
   }
 
-  // Update in-memory catalog
   const currentCatalog = catalog ? catalog : {datasets: []};
   const dsInCatalog = currentCatalog.datasets.find(d => d.name === datasetName);
   if (dsInCatalog) {
@@ -589,7 +609,6 @@ export async function updateKeysFromSqlAnalysis(datasetName: string, targetTable
     : Array.from(new Set([...keyInfo.primaryKeys.map(k => k.tableName), ...keyInfo.foreignKeys.map(k => k.tableName)]));
   addLog(`[CatalogStore-UpdateKeysSQL] Tables to reset/update keys for: ${tablesToResetKeys.join(', ')}`);
 
-  // Reset relevant keys in rawData
   tablesToResetKeys.forEach(tableNameFromAI => {
     rawDataForEnrichment!.columns.forEach(rawCol => {
       if (rawCol.TABLE_NAME === tableNameFromAI && rawDataForEnrichment!.tables.some(t => t.TABLE_NAME === tableNameFromAI && t.Dataset_name === datasetName)) {
@@ -599,7 +618,6 @@ export async function updateKeysFromSqlAnalysis(datasetName: string, targetTable
     });
   });
 
-  // Apply new PKs from AI
   keyInfo.primaryKeys.forEach(pk => {
     if (targetTableName && pk.tableName !== targetTableName) return; 
     const rawCol = rawDataForEnrichment!.columns.find(c => c.TABLE_NAME === pk.tableName && c.COLUMN_NAME === pk.columnName && rawDataForEnrichment!.tables.some(t => t.TABLE_NAME === pk.tableName && t.Dataset_name === datasetName));
@@ -610,7 +628,6 @@ export async function updateKeysFromSqlAnalysis(datasetName: string, targetTable
     }
   });
 
-  // Apply new FKs from AI
   keyInfo.foreignKeys.forEach(fk => {
     if (targetTableName && fk.tableName !== targetTableName) return;
     const rawCol = rawDataForEnrichment!.columns.find(c => c.TABLE_NAME === fk.tableName && c.COLUMN_NAME === fk.columnName && rawDataForEnrichment!.tables.some(t => t.TABLE_NAME === fk.tableName && t.Dataset_name === datasetName));
@@ -621,7 +638,6 @@ export async function updateKeysFromSqlAnalysis(datasetName: string, targetTable
     }
   });
 
-  // Rebuild in-memory catalog from updated rawData
   if (changesMade) {
     catalog = transformRawToInitialCatalog(rawDataForEnrichment);
     await saveCatalogToExcel();
@@ -632,9 +648,7 @@ export async function updateKeysFromSqlAnalysis(datasetName: string, targetTable
   return changesMade;
 }
 
-// Call on server startup to load initial catalog if file exists
 if (typeof process !== 'undefined' && (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test')) {
     loadAndInitializeCatalogFromDisk();
     addLog("[CatalogStore] Initial load attempt from disk complete on store module load.");
 }
-
