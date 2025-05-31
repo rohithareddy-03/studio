@@ -1,0 +1,7 @@
+
+Dataset_name,Dataset_description,Tags,source,location
+SalesData,All sales transactions and customer information,sales,transactions,e-commerce,finance,CRM,BigQuery,US-East1
+MarketingCampaigns,Data related to marketing campaigns, performance metrics, and customer engagement,marketing,campaigns,analytics,Google Analytics,Global
+HRRecords,Employee information, payroll, and HR-related data,hr,employee,pii,Workday,Internal
+Inventory,Product inventory levels, stock movements, and supplier information,inventory,logistics,products,SAP,Multiple Warehouses
+WebsiteAnalytics,User behavior on the company website, page views, sessions, and traffic sources,web,analytics,tracking,Adobe Analytics,Online

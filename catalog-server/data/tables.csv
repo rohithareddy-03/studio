@@ -1,0 +1,9 @@
+
+TABLE_NAME,Dataset_name,Description,Table_tags,PRIMARY_KEYS,FOREIGN_KEYS,Row_count,source,location,DATABASE_NAME,SCHEMA_NAME,OWNER,CREATED_DATE,UPDATED_DATE
+Customers,SalesData,Stores customer master data,customer,profile,PII,CustomerID,AddressID,150000,CRM System,SalesDB,dbo,customers_owner,2022-01-15,2024-05-01
+Orders,SalesData,Contains all order headers and transaction summaries,orders,transactions,finance,OrderID,CustomerID,ProductIDs,500000,E-commerce Platform,SalesDB,dbo,orders_owner,2022-01-20,2024-05-20
+OrderItems,SalesData,Details of items within each order,order_details,products,OrderItemID,OrderID,ProductID,2000000,E-commerce Platform,SalesDB,dbo,orderitems_owner,2022-01-20,2024-05-20
+Products,Inventory,Master list of all products,products,catalog,ProductSKU,,5000,PIM System,InventoryDB,prod,inventory_manager,2021-11-01,2024-05-15
+CampaignPerformance,MarketingCampaigns,Metrics for marketing campaign performance including clicks, conversions, and spend.,marketing,roi,analytics,CampaignID,Date,DailyMetricsID,100000,Marketing DB,CampaignDB,mktg,campaign_analyst,2023-01-01,2024-05-20
+Employees,HRRecords,Confidential employee details,hr,personnel,PII,EmployeeID,,2000,HRIS,HR_Internal,hr_schema,hr_admin,2020-01-01,2024-05-18
+PageViews,WebsiteAnalytics,Log of all page views on the website,web_logs,tracking,PageViewID,SessionID,UserID,10000000,Web Server,AnalyticsDB,web,analytics_team,2022-05-01,2024-05-21

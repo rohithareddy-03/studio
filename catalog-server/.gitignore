@@ -1,0 +1,8 @@
+
+node_modules/
+*.log
+data/*
+!data/datasets.csv
+!data/tables.csv
+!data/columns.csv
+# Add other files to ignore if needed (e.g., .env)

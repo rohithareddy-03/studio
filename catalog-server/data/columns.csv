@@ -1,0 +1,34 @@
+
+TABLE_NAME,COLUMN_NAME,DATA_TYPE,PRIMARY_KEY,FOREIGN_KEY,column_description,Column_tags,REFERENCED_TABLE,REFERENCED_COLUMN,location
+Customers,CustomerID,INT,true,false,Unique identifier for each customer,customer_id,identifier,,CRM
+Customers,FirstName,VARCHAR(100),false,false,Customer's first name,name,PII,,CRM
+Customers,LastName,VARCHAR(100),false,false,Customer's last name,name,PII,,CRM
+Customers,Email,VARCHAR(255),false,false,Customer's email address,contact,PII,,CRM
+Customers,AddressID,INT,false,true,Foreign key to Addresses table,address,location,Addresses,AddressID,CRM
+Orders,OrderID,INT,true,false,Unique identifier for each order,order_id,transaction_id,,E-commerce
+Orders,CustomerID,INT,false,true,Foreign key linking to the Customers table,customer_id,identifier,Customers,CustomerID,E-commerce
+Orders,OrderDate,DATE,false,false,Date the order was placed,date,transaction_date,,E-commerce
+Orders,TotalAmount,DECIMAL(10,2),false,false,Total amount of the order,finance,currency,,E-commerce
+OrderItems,OrderItemID,INT,true,false,Unique identifier for each order item,item_id,,E-commerce
+OrderItems,OrderID,INT,false,true,Foreign key linking to the Orders table,order_id,transaction_id,Orders,OrderID,E-commerce
+OrderItems,ProductID,VARCHAR(50),false,true,Foreign key linking to the Products table,product_id,identifier,Products,ProductSKU,E-commerce
+OrderItems,Quantity,INT,false,false,Number of units of the product ordered,count,,E-commerce
+OrderItems,UnitPrice,DECIMAL(10,2),false,false,Price per unit of the product,finance,currency,,E-commerce
+Products,ProductSKU,VARCHAR(50),true,false,Unique stock keeping unit for the product,product_id,sku,,PIM
+Products,ProductName,VARCHAR(255),false,false,Name of the product,product_name,,PIM
+Products,Category,VARCHAR(100),false,false,Category the product belongs to,classification,,PIM
+Products,SupplierID,INT,false,true,Identifier for the product supplier,supplier,vendor,Suppliers,SupplierID,PIM
+CampaignPerformance,CampaignID,VARCHAR(50),true,false,Unique identifier for the marketing campaign,campaign_id,,Marketing DB
+CampaignPerformance,Date,DATE,true,false,Date of the performance record (part of composite PK),date,time_series,,Marketing DB
+CampaignPerformance,Impressions,INT,false,false,Number of times the ad was shown,metrics,ad_metrics,,Marketing DB
+CampaignPerformance,Clicks,INT,false,false,Number of clicks on the ad,metrics,ad_metrics,,Marketing DB
+CampaignPerformance,Conversions,INT,false,false,Number of conversions resulting from the campaign,metrics,sales_metrics,,Marketing DB
+Employees,EmployeeID,INT,true,false,Unique identifier for each employee,employee_id,identifier,PII,,HRIS
+Employees,FullName,VARCHAR(200),false,false,Employee's full name,name,PII,,HRIS
+Employees,Department,VARCHAR(100),false,false,Department the employee belongs to,organization,,HRIS
+Employees,Salary,DECIMAL(12,2),false,false,Employee's annual salary,finance,compensation,PII,,HRIS
+PageViews,PageViewID,BIGINT,true,false,Unique ID for each page view event,event_id,log_id,,Web Server
+PageViews,SessionID,VARCHAR(100),false,false,Identifier for the user session,session,tracking,,Web Server
+PageViews,UserID,INT,false,true,Identifier of the user who viewed the page (if logged in),user_id,identifier,Customers,CustomerID,Web Server
+PageViews,URL,VARCHAR(1024),false,false,URL of the page viewed,web_address,navigation,,Web Server
+PageViews,Timestamp,DATETIME,false,false,Exact time of the page view,time,event_time,,Web Server
