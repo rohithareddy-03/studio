@@ -1,19 +1,22 @@
+
 // src/app/api/upload/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
 import { initializeCatalog, storeRawDataForEnrichment } from '@/lib/catalog-store';
 import type { RawDataset, RawTable, RawColumn } from '@/types';
 import { addLog } from '@/lib/log-store'; // Import addLog
+import fs from 'fs';
+import path from 'path';
 
 // Define required headers for each sheet (Canonical Casing for internal reference, matching logic is case-insensitive)
 const REQUIRED_DATASET_HEADERS = ['Dataset_name', 'Dataset_description', 'Tags', 'source', 'location'];
 const REQUIRED_TABLE_HEADERS = [
-  'TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME', 
-  'OWNER', 'PRIMARY_KEYS', 'FOREIGN_KEYS', 'CREATED_DATE', 'UPDATED_DATE', 
+  'TABLE_NAME', 'Dataset_name', 'source', 'location', 'DATABASE_NAME', 'SCHEMA_NAME',
+  'OWNER', 'PRIMARY_KEYS', 'FOREIGN_KEYS', 'CREATED_DATE', 'UPDATED_DATE',
   'Row_count', 'Description', 'Table_tags', 'Sensitivity'
 ];
 const REQUIRED_COLUMN_HEADERS = [
-  'TABLE_NAME', 'COLUMN_NAME', 'DATA_TYPE', 'PRIMARY_KEY', 'FOREIGN_KEY', 
+  'TABLE_NAME', 'COLUMN_NAME', 'DATA_TYPE', 'PRIMARY_KEY', 'FOREIGN_KEY',
   'column_description', 'Column_tags', 'Sensitivity', 'location'
 ];
 
@@ -25,13 +28,13 @@ const ALL_COLUMN_KEYS: (keyof RawColumn)[] = ['TABLE_NAME', 'COLUMN_NAME', 'DATA
 
 function validateHeaders(sheetData: any[], requiredHeaders: string[], sheetName: string): string | null {
   if (!sheetData || sheetData.length === 0) {
-    return null; 
+    return null;
   }
   const actualHeaders = Object.keys(sheetData[0]).map(h => h.toLowerCase());
   const requiredHeadersLower = requiredHeaders.map(h => h.toLowerCase());
-  
+
   const missingHeaders = requiredHeadersLower.filter(reqHeader => !actualHeaders.includes(reqHeader));
-  
+
   if (missingHeaders.length > 0) {
     const originalCaseMissingHeaders = requiredHeaders.filter(rh => missingHeaders.includes(rh.toLowerCase()));
     return `Sheet '${sheetName}' is missing required columns (case-insensitive check): ${originalCaseMissingHeaders.join(', ')}. Please ensure all required headers are present.`;
@@ -74,6 +77,24 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
+
+    // Save the file to public/csv_data_store/catalog.xlsx
+    const dataStoreDir = path.join(process.cwd(), 'public', 'csv_data_store');
+    const filePath = path.join(dataStoreDir, 'catalog.xlsx');
+
+    try {
+      if (!fs.existsSync(dataStoreDir)) {
+        fs.mkdirSync(dataStoreDir, { recursive: true });
+        addLog(`Upload API: Created directory ${dataStoreDir}`);
+      }
+      fs.writeFileSync(filePath, Buffer.from(bytes));
+      addLog(`Upload API: File successfully saved to ${filePath}`);
+    } catch (saveError: any) {
+      addLog(`Upload API Error: Failed to save file to ${filePath}. Error: ${saveError.message}`);
+      console.error('File save error:', saveError);
+      return NextResponse.json({ error: `Failed to save uploaded file: ${saveError.message}` }, { status: 500 });
+    }
+
     const workbook = XLSX.read(bytes, { type: 'array' });
 
     const datasetsSheet = workbook.Sheets['datasets'];
@@ -84,11 +105,11 @@ export async function POST(request: NextRequest) {
       addLog("Upload API Error: Missing required sheet: 'datasets'.");
       return NextResponse.json({ error: "Missing required sheet: 'datasets'." }, { status: 400 });
     }
-    
+
     const parsedDatasets: any[] = XLSX.utils.sheet_to_json(datasetsSheet, { defval: null });
     const parsedTables: any[] = tablesSheet ? XLSX.utils.sheet_to_json(tablesSheet, { defval: null }) : [];
     const parsedColumns: any[] = columnsSheet ? XLSX.utils.sheet_to_json(columnsSheet, { defval: null }) : [];
-    
+
     addLog(`Upload API: Parsed datasets: ${parsedDatasets.length}, tables: ${parsedTables.length}, columns: ${parsedColumns.length}`);
 
     let validationError;
@@ -102,7 +123,7 @@ export async function POST(request: NextRequest) {
       addLog(`Upload API Error: Header validation failed for 'datasets': ${validationError}`);
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
-    
+
     if (parsedTables.length > 0 && (parsedTables[0] && Object.values(parsedTables[0]).some(v => v !== null))) {
         validationError = validateHeaders(parsedTables, REQUIRED_TABLE_HEADERS, 'tables');
         if (validationError) {
@@ -118,7 +139,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: validationError }, { status: 400 });
         }
     }
-    
+
     const firstDatasetRaw = parsedDatasets[0];
     const datasetNameKeyInRaw = Object.keys(firstDatasetRaw).find(k => k.toLowerCase() === 'dataset_name');
     if (!datasetNameKeyInRaw || firstDatasetRaw[datasetNameKeyInRaw] === null || String(firstDatasetRaw[datasetNameKeyInRaw]).trim() === '') {
@@ -131,7 +152,7 @@ export async function POST(request: NextRequest) {
     const rawColumns: RawColumn[] = transformToCanonical<RawColumn>(parsedColumns, ALL_COLUMN_KEYS);
 
     addLog("Upload API: Storing raw data for potential enrichment and initializing catalog...");
-    storeRawDataForEnrichment({ 
+    storeRawDataForEnrichment({
       datasets: rawDatasets,
       tables: rawTables,
       columns: rawColumns,
@@ -141,7 +162,7 @@ export async function POST(request: NextRequest) {
     addLog("Upload API: Catalog initialization complete.");
 
     try {
-      JSON.stringify(enrichedCatalog); 
+      JSON.stringify(enrichedCatalog);
     } catch (e: any) {
       addLog(`Upload API Critical Error: Enriched catalog data is not serializable. Error: ${e.message}`);
       console.error("Upload API Critical Error: Enriched catalog data is not serializable.", e.message, e.stack);
@@ -149,19 +170,19 @@ export async function POST(request: NextRequest) {
     }
 
     addLog("Upload API: File uploaded and catalog processed successfully. Returning response.");
-    return NextResponse.json({ message: 'File uploaded and catalog processed successfully.', catalog: enrichedCatalog }, { status: 200 });
+    return NextResponse.json({ message: 'File uploaded, saved, and catalog processed successfully.', catalog: enrichedCatalog }, { status: 200 });
 
   } catch (error: any) {
     addLog(`Upload API Error: An unexpected error occurred. Error: ${error.message}`);
-    console.error('Upload API Error:', error); 
+    console.error('Upload API Error:', error);
     let simpleErrorMessage = 'An unexpected error occurred during file upload.';
 
     if (error && typeof error.message === 'string') {
-      simpleErrorMessage = error.message.substring(0, 500); 
+      simpleErrorMessage = error.message.substring(0, 500);
     } else if (typeof error === 'string') {
-      simpleErrorMessage = error.substring(0, 500); 
+      simpleErrorMessage = error.substring(0, 500);
     }
-    
+
     if (error && typeof error === 'object' && !(error instanceof Error)) {
         try {
             console.error('Upload API Full error object (non-Error instance):', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
