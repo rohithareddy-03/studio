@@ -497,7 +497,7 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
     
     // Update columns based on AI output
  for (const rawCol of rawColumnsForTable) { // Iterate over original raw columns for the table
-      const aiEnrichedCol = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === rawCol.COLUMN_NAME && c.TABLE_NAME === rawCol.TABLE_NAME);
+      const aiEnrichedCol = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === rawCol.COLUMN_NAME); // AI output no longer includes TABLE_NAME for columns individually
 
       // Find the corresponding column in the catalog and update it
       const catalogCol = currentTableInCatalog.columns.find(c => c.name === rawCol.COLUMN_NAME);
