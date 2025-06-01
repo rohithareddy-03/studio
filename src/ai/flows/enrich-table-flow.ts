@@ -21,31 +21,12 @@ import { addLog } from '@/lib/log-store';
 const TableSchemaForAIInput = z.object({
   TABLE_NAME: z.string(),
   Dataset_name: z.string(), // For context
-  source: z.string().nullable().optional(),
-  location: z.string().nullable().optional(),
-  DATABASE_NAME: z.string().nullable().optional(),
-  SCHEMA_NAME: z.string().nullable().optional(),
-  OWNER: z.string().nullable().optional(),
-  // PRIMARY_KEYS: z.string().nullable().optional(), // This is a summary, AI will determine per column
-  // FOREIGN_KEYS: z.string().nullable().optional(), // This is a summary, AI will determine per column
-  CREATED_DATE: z.string().nullable().optional(), // Must be string or null
-  UPDATED_DATE: z.string().nullable().optional(), // Must be string or null
-  Row_count: z.string().nullable().optional(),    // Must be string or null
-  Description: z.string().nullable().optional(),
-  Table_tags: z.string().nullable().optional(),
-  Sensitivity: z.string().nullable().optional(),
 });
 
 const ColumnSchemaForAIInput = z.object({
   TABLE_NAME: z.string(), 
   COLUMN_NAME: z.string(),
   DATA_TYPE: z.string().nullable().optional(),
-  PRIMARY_KEY: z.string().nullable().optional(), 
-  FOREIGN_KEY: z.string().nullable().optional(), 
-  column_description: z.string().nullable().optional(),
-  Column_tags: z.string().nullable().optional(),
-  Sensitivity: z.string().nullable().optional(),
-  location: z.string().nullable().optional(),
 });
 
 const EnrichTableInputSchema = z.object({
@@ -53,29 +34,19 @@ const EnrichTableInputSchema = z.object({
     Dataset_name: z.string(),
     Dataset_description: z.string().nullable().optional(),
   }).describe("Context about the parent dataset."),
-  tableToEnrich: TableSchemaForAIInput.describe("The raw metadata for the table to be enriched."),
-  columnsToEnrich: z.array(ColumnSchemaForAIInput).describe("The raw metadata for columns belonging to the tableToEnrich."),
-  otherTableNamesInDataset: z.array(z.string()).optional().describe("Names of other tables in the same dataset for broader context, e.g., for inferring foreign keys."),
+  tableToEnrich: z.object({ TABLE_NAME: z.string() }).describe("The raw metadata for the table to be enriched."),
+  columnsToEnrich: z.array(z.object({ TABLE_NAME: z.string(), COLUMN_NAME: z.string(), DATA_TYPE: z.string().nullable().optional() })).describe("The raw metadata for columns belonging to the tableToEnrich."),
+  otherTableNamesInDataset: z.array(z.string()).optional().describe("Names of other tables in the same dataset for broader context, e.g., for inferring foreign keys."), // Still useful context for AI
 });
 export type EnrichTableInput = z.infer<typeof EnrichTableInputSchema>;
 
 
 // --- Schemas for the AI's DIRECT output (Permissive, with renamed fields) ---
 const PermissiveEnrichedTableDataForAIOutputSchema = z.object({
-  TABLE_NAME: z.string().describe("The name of the table. Must match input."),
-  Dataset_name: z.string().describe("The name of the dataset. Must match input."),
+  TABLE_NAME: z.string().describe("The name of the table."),
   table_description: z.string().nullable().optional().describe("Generated or improved table description. You MUST generate this. Can be an empty string or null if no meaningful description can be generated."),
   tags: z.string().nullable().optional().describe("Generated or improved comma-separated tags for the table. You MUST generate this. Can be an empty string or null if no meaningful tags can be generated."),
   Sensitivity: z.string().nullable().optional().describe("Determined sensitivity level ('low', 'medium', 'high', or 'unknown'). Consider original value if present."),
-  // Pass-through fields - AI should return them as-is, schema is permissive
-  source: z.any().nullable().optional(),
-  location: z.any().nullable().optional(),
-  DATABASE_NAME: z.any().nullable().optional(),
-  SCHEMA_NAME: z.any().nullable().optional(),
-  OWNER: z.any().nullable().optional(),
-  CREATED_DATE: z.any().nullable().optional(),
-  UPDATED_DATE: z.any().nullable().optional(),
-  Row_count: z.any().nullable().optional(),
 });
 
 const PermissiveEnrichedColumnDataForAIOutputSchema = z.object({
@@ -84,10 +55,12 @@ const PermissiveEnrichedColumnDataForAIOutputSchema = z.object({
   description: z.string().nullable().optional().describe("Generated or improved column description. You MUST generate this. Can be an empty string or null if no meaningful description can be generated."),
   tags: z.string().nullable().optional().describe("Generated or improved comma-separated tags for the column. You MUST generate this. Can be an empty string or null if no meaningful tags can be generated."),
   Sensitivity: z.string().nullable().optional().describe("Determined sensitivity level ('low', 'medium', 'high', or 'unknown'). Consider original value if present."),
+  // AI should ideally return these, even if it didn't use them directly for enrichment tasks beyond context
+  DATA_TYPE: z.string().nullable().optional().describe("The data type of the column."),
   PRIMARY_KEY: z.union([z.boolean(), z.string()]).nullable().optional().describe("Determined if this column is a primary key ('true'/'false' as string, or boolean). Consider original value."),
   FOREIGN_KEY: z.union([z.boolean(), z.string()]).nullable().optional().describe("Determined if this column is a foreign key ('true'/'false' as string, or boolean). Consider original value and other table names."),
   // Pass-through fields - AI should return them as-is, schema is permissive
-  DATA_TYPE: z.any().nullable().optional(),
+  // description and tags from original input are not in the AI input schema anymore
   location: z.any().nullable().optional(),
 });
 
@@ -98,14 +71,13 @@ const EnrichTableAIOutputSchema = z.object({
 
 
 // --- Schemas for what the FLOW will *RETURN* (Strictly typed after normalization) ---
-// These remain unchanged as the application expects this final structure.
+// These remain unchanged as the application expects this final structure. They include more fields than the AI's direct input/output schemas.
 const EnrichedTableDataSchema = TableSchemaForAIInput.extend({ 
   Description: z.string().nullable().optional(), // Maps from table_description
   Table_tags: z.string().nullable().optional(),  // Maps from tags
   Sensitivity: z.string().nullable().optional(),
 });
-// .omit({ PRIMARY_KEYS: true, FOREIGN_KEYS: true }); // Omit summary fields not handled by this flow
-
+ 
 const EnrichedColumnDataSchema = ColumnSchemaForAIInput.extend({ 
   column_description: z.string().nullable().optional(), // Maps from description
   Column_tags: z.string().nullable().optional(),        // Maps from tags
@@ -223,27 +195,10 @@ const enrichTableFlow = ai.defineFlow(
     
     const sanitizedTableForPrompt = {
       ...input.tableToEnrich,
-      Description: input.tableToEnrich.Description || "", 
-      Table_tags: input.tableToEnrich.Table_tags || "",   
-      Sensitivity: input.tableToEnrich.Sensitivity || "unknown",
-      Row_count: (input.tableToEnrich.Row_count !== null && input.tableToEnrich.Row_count !== undefined)
-                    ? String(input.tableToEnrich.Row_count)
-                    : null,
-      CREATED_DATE: (input.tableToEnrich.CREATED_DATE !== null && input.tableToEnrich.CREATED_DATE !== undefined)
-                    ? String(input.tableToEnrich.CREATED_DATE)
-                    : null,
-      UPDATED_DATE: (input.tableToEnrich.UPDATED_DATE !== null && input.tableToEnrich.UPDATED_DATE !== undefined)
-                    ? String(input.tableToEnrich.UPDATED_DATE)
-                    : null,
     };
 
     const sanitizedColumnsForPrompt = (input.columnsToEnrich || []).map(c => ({
       ...c,
-      column_description: c.column_description || "", 
-      Column_tags: c.Column_tags || "",       
-      Sensitivity: c.Sensitivity || "unknown",
-      PRIMARY_KEY: c.PRIMARY_KEY || null, 
-      FOREIGN_KEY: c.FOREIGN_KEY || null,
     }));
 
     const sanitizedInputForAI = {
@@ -251,7 +206,7 @@ const enrichTableFlow = ai.defineFlow(
         Dataset_name: input.datasetContext.Dataset_name,
         Dataset_description: input.datasetContext.Dataset_description || "",
       },
-      tableToEnrich: sanitizedTableForPrompt,
+      tableToEnrich: { TABLE_NAME: sanitizedTableForPrompt.TABLE_NAME }, // Only pass TABLE_NAME
       columnsToEnrich: sanitizedColumnsForPrompt,
       otherTableNamesInDataset: input.otherTableNamesInDataset || [],
     };
@@ -272,32 +227,22 @@ const enrichTableFlow = ai.defineFlow(
       throw new Error(`AI prompt call failed for table ${input.tableToEnrich.TABLE_NAME}: ${promptErrorMsg}`);
     }
 
-    const originalInputTable = input.tableToEnrich; 
+    const originalInputTable = input.tableToEnrich;
     const aiProvidedTable = aiModelOutput.tableToEnrich; 
 
     const finalEnrichedTableData: z.infer<typeof EnrichedTableDataSchema> = {
-        TABLE_NAME: originalInputTable.TABLE_NAME, 
-        Dataset_name: originalInputTable.Dataset_name, 
-        Description: aiProvidedTable.table_description ?? originalInputTable.Description ?? null, 
-        Table_tags: aiProvidedTable.tags ?? originalInputTable.Table_tags ?? null, 
-        Sensitivity: aiProvidedTable.Sensitivity ?? originalInputTable.Sensitivity ?? 'unknown',
-        source: String(aiProvidedTable.source ?? originalInputTable.source ?? null),
-        location: String(aiProvidedTable.location ?? originalInputTable.location ?? null),
-        DATABASE_NAME: String(aiProvidedTable.DATABASE_NAME ?? originalInputTable.DATABASE_NAME ?? null),
-        SCHEMA_NAME: String(aiProvidedTable.SCHEMA_NAME ?? originalInputTable.SCHEMA_NAME ?? null),
-        OWNER: String(aiProvidedTable.OWNER ?? originalInputTable.OWNER ?? null),
-        CREATED_DATE: String(aiProvidedTable.CREATED_DATE ?? originalInputTable.CREATED_DATE ?? null),
-        UPDATED_DATE: String(aiProvidedTable.UPDATED_DATE ?? originalInputTable.UPDATED_DATE ?? null),
-        Row_count: (aiProvidedTable.Row_count !== undefined && aiProvidedTable.Row_count !== null)
-                    ? String(aiProvidedTable.Row_count)
-                    : (originalInputTable.Row_count ?? null),
+        TABLE_NAME: originalInputTable.TABLE_NAME,
+        Dataset_name: input.datasetContext.Dataset_name, // Use dataset name from context
+        Description: aiProvidedTable.table_description ?? null, // Only use AI description
+        Table_tags: aiProvidedTable.tags ?? null, // Only use AI tags
+        Sensitivity: aiProvidedTable.Sensitivity ?? 'unknown', // Only use AI sensitivity
     };
 
     const finalNormalizedColumns: z.infer<typeof EnrichedColumnDataSchema>[] = [];
     for (const originalInputCol of input.columnsToEnrich) { 
         const aiCol = aiModelOutput.columnsToEnrich.find(c => c.COLUMN_NAME === originalInputCol.COLUMN_NAME && c.TABLE_NAME === originalInputCol.TABLE_NAME);
-
         let pkValue: string | null = null;
+ if (aiCol) { // Only update if AI returned data for this column
         const aiPk = aiCol?.PRIMARY_KEY;
         if (typeof aiPk === 'boolean') pkValue = aiPk ? 'true' : 'false';
         else if (typeof aiPk === 'string' && (aiPk.toLowerCase() === 'true' || aiPk.toLowerCase() === 'false')) pkValue = aiPk.toLowerCase();
@@ -321,11 +266,9 @@ const enrichTableFlow = ai.defineFlow(
             FOREIGN_KEY: fkValue,
         };
         finalNormalizedColumns.push(normalizedCol);
+ }
     }
     
-    // The main loop above ensures one output column for each input column.
-    // The block for handling column count mismatches has been removed as it was a likely source of duplicates.
-
     const finalOutput: EnrichTableOutput = {
         enrichedTable: finalEnrichedTableData,
         enrichedColumns: finalNormalizedColumns,

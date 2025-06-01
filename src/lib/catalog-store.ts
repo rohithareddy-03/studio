@@ -479,23 +479,12 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
 
     const enrichedTableFromAI = aiOutput.enrichedTable; // Should also have canonical keys from AI flow's strict output
     const enrichedColumnsFromAI = aiOutput.enrichedColumns; // Same here
-    const currentTableInCatalog = datasetInCatalog.tables[tableIndexInCatalog];
-    
+
     // Update catalog (all keys here are canonical)
+    const currentTableInCatalog = datasetInCatalog.tables[tableIndexInCatalog];
     currentTableInCatalog.description = enrichedTableFromAI.Description ?? currentTableInCatalog.description;
     currentTableInCatalog.tags = enrichedTableFromAI.Table_tags ?? currentTableInCatalog.tags;
     currentTableInCatalog.sensitivity = enrichedTableFromAI.Sensitivity ?? currentTableInCatalog.sensitivity ?? 'unknown';
-    currentTableInCatalog.source = enrichedTableFromAI.source ?? currentTableInCatalog.source;
-    currentTableInCatalog.location = enrichedTableFromAI.location ?? currentTableInCatalog.location;
-    // ... (all other fields should be using canonical keys from EnrichedTableDataSchema in AI flow) ...
-    currentTableInCatalog.databaseName = enrichedTableFromAI.DATABASE_NAME ?? currentTableInCatalog.databaseName;
-    currentTableInCatalog.schemaName = enrichedTableFromAI.SCHEMA_NAME ?? currentTableInCatalog.schemaName;
-    currentTableInCatalog.owner = enrichedTableFromAI.OWNER ?? currentTableInCatalog.owner;
-    currentTableInCatalog.createdDate = enrichedTableFromAI.CREATED_DATE ?? currentTableInCatalog.createdDate;
-    currentTableInCatalog.updatedDate = enrichedTableFromAI.UPDATED_DATE ?? currentTableInCatalog.updatedDate;
-    currentTableInCatalog.rowCount = (enrichedTableFromAI.Row_count !== undefined && enrichedTableFromAI.Row_count !== null) 
-                                     ? parseInt(String(enrichedTableFromAI.Row_count),10) 
-                                     : currentTableInCatalog.rowCount;
     
     // Update rawDataForEnrichment (all keys here are canonical)
     const rawTableIndex = rawDataForEnrichment.tables.findIndex(t => t.Dataset_name === datasetName && t.TABLE_NAME === tableName);
@@ -504,54 +493,31 @@ export async function enrichSingleTableInStore(datasetName: string, tableName: s
       targetRawTable.Description = currentTableInCatalog.description;
       targetRawTable.Table_tags = currentTableInCatalog.tags;
       targetRawTable.Sensitivity = currentTableInCatalog.sensitivity;
-      // ... (all other fields) ...
-      targetRawTable.source = currentTableInCatalog.source;
-      targetRawTable.location = currentTableInCatalog.location;
-      targetRawTable.DATABASE_NAME = currentTableInCatalog.databaseName;
-      targetRawTable.SCHEMA_NAME = currentTableInCatalog.schemaName;
-      targetRawTable.OWNER = currentTableInCatalog.owner;
-      targetRawTable.CREATED_DATE = currentTableInCatalog.createdDate;
-      targetRawTable.UPDATED_DATE = currentTableInCatalog.updatedDate;
-      targetRawTable.Row_count = currentTableInCatalog.rowCount !== undefined ? String(currentTableInCatalog.rowCount) : null;
     }
     
-    const updatedColumnsForCatalog: EnrichedColumn[] = [];
-    for (const originalInputColumn of rawColumnsForTable) { // originalInputColumn has canonical keys
-      const colAI = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === originalInputColumn.COLUMN_NAME && c.TABLE_NAME === tableName);
-      
-      const updatedEnrichedCol: EnrichedColumn = {
-        id: `${datasetName}/${tableName}/${originalInputColumn.COLUMN_NAME}`,
-        name: originalInputColumn.COLUMN_NAME, // Canonical
-        dataType: colAI?.DATA_TYPE ?? originalInputColumn.DATA_TYPE ?? null, // Canonical
-        location: colAI?.location ?? originalInputColumn.location ?? null, // Canonical
-        description: colAI?.column_description ?? originalInputColumn.column_description ?? null, // Canonical
-        tags: colAI?.Column_tags ?? originalInputColumn.Column_tags ?? null, // Canonical
-        sensitivity: colAI?.Sensitivity ?? originalInputColumn.Sensitivity ?? 'unknown', // Canonical
-        isPrimaryKey: colAI ? String(colAI.PRIMARY_KEY).toLowerCase() === 'true' : String(originalInputColumn.PRIMARY_KEY).toLowerCase() === 'true',
-        isForeignKey: colAI ? String(colAI.FOREIGN_KEY).toLowerCase() === 'true' : String(originalInputColumn.FOREIGN_KEY).toLowerCase() === 'true',
-      };
-      updatedColumnsForCatalog.push(updatedEnrichedCol);
+    // Update columns based on AI output
+ for (const rawCol of rawColumnsForTable) { // Iterate over original raw columns for the table
+      const aiEnrichedCol = enrichedColumnsFromAI.find(c => c.COLUMN_NAME === rawCol.COLUMN_NAME && c.TABLE_NAME === rawCol.TABLE_NAME);
 
-      // Update rawDataForEnrichment.columns (all keys here are canonical)
-      const rawColIndex = rawDataForEnrichment.columns.findIndex(c => c.TABLE_NAME === tableName && c.COLUMN_NAME === originalInputColumn.COLUMN_NAME);
-      if (rawColIndex > -1) {
-        const targetRawCol = rawDataForEnrichment.columns[rawColIndex];
-        targetRawCol.column_description = updatedEnrichedCol.description;
-        targetRawCol.Column_tags = updatedEnrichedCol.tags;
-        targetRawCol.Sensitivity = updatedEnrichedCol.sensitivity;
-        targetRawCol.PRIMARY_KEY = updatedEnrichedCol.isPrimaryKey ? 'true' : 'false';
-        targetRawCol.FOREIGN_KEY = updatedEnrichedCol.isForeignKey ? 'true' : 'false';
-        targetRawCol.DATA_TYPE = updatedEnrichedCol.dataType;
-        targetRawCol.location = updatedEnrichedCol.location;
+      // Find the corresponding column in the catalog and update it
+      const catalogCol = currentTableInCatalog.columns.find(c => c.name === rawCol.COLUMN_NAME);
+      if (catalogCol && aiEnrichedCol) {
+        catalogCol.description = aiEnrichedCol.column_description ?? catalogCol.description;
+        catalogCol.tags = aiEnrichedCol.Column_tags ?? catalogCol.tags;
+        catalogCol.sensitivity = aiEnrichedCol.Sensitivity ?? catalogCol.sensitivity ?? 'unknown';
       }
+
+      // Find the corresponding column in rawDataForEnrichment and update it
+      const rawDataCol = rawDataForEnrichment.columns.find(c => c.TABLE_NAME === rawCol.TABLE_NAME && c.COLUMN_NAME === rawCol.COLUMN_NAME);
+      if (rawDataCol && aiEnrichedCol) {
+        rawDataCol.column_description = aiEnrichedCol.column_description ?? rawDataCol.column_description;
+        rawDataCol.Column_tags = aiEnrichedCol.Column_tags ?? rawDataCol.Column_tags;
+        rawDataCol.Sensitivity = aiEnrichedCol.Sensitivity ?? rawDataCol.Sensitivity;
+       }
     }
-    currentTableInCatalog.columns = updatedColumnsForCatalog;
-    currentTableInCatalog.primaryKeys = updatedColumnsForCatalog.filter(c => c.isPrimaryKey).map(c => c.name).join(', ') || null;
-    currentTableInCatalog.foreignKeys = updatedColumnsForCatalog.filter(c => c.isForeignKey).map(c => c.name).join(', ') || null;
-    
     catalog = currentCatalog; // Assign back the modified catalog
     await saveCatalogToExcel(); 
-    addLog(`[CatalogStore] enrichSingleTableInStore: Table ${tableName} updated in catalog and rawData, then saved. Columns processed: ${updatedColumnsForCatalog.length}.`);
+    addLog(`[CatalogStore] enrichSingleTableInStore: Table ${tableName} updated in catalog and rawData, then saved. Columns processed: ${rawColumnsForTable.length}.`);
     return currentTableInCatalog;
 
   } catch (error) {
@@ -663,7 +629,7 @@ export async function updateRawDataField(itemId: string, fieldKeyToUpdate: 'desc
         if (fieldKeyToUpdate === 'description') tblInCatalog.description = newValue;
         else if (fieldKeyToUpdate === 'tags') tblInCatalog.tags = newValue;
         catalogFieldUpdated = true;
-      }
+        }
     } else {
       if (fieldKeyToUpdate === 'description') dsInCatalog.description = newValue;
       else if (fieldKeyToUpdate === 'tags') dsInCatalog.tags = newValue;
