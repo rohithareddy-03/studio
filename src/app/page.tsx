@@ -131,25 +131,27 @@ export default function DashboardPage() {
               <DatasetSelector />
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={datasetChatScrollAreaRef}>
-              {chatMessages.length === 0 && !isCatalogLoading && (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
-                  {selectedDataset
-                      ? <>
-                          <MessageSquareDashed size={52} className="mb-4 opacity-60 stroke-1" />
-                          <p className="text-xl font-medium">Chat with '{selectedDataset.name}'</p>
-                          <p className="text-sm mt-1">Ask questions, generate SQL, or get summaries about this dataset.</p>
-                        </>
-                      : <>
-                          <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
-                          <p className="text-xl font-medium">Dataset Chat</p>
-                          <p className="text-sm mt-1">Select a dataset from 'Quick Access' or the dropdown above to begin contextual chat.</p>
-                        </>
-                  }
+              <div className="flex flex-col justify-end min-h-full">
+                {chatMessages.length === 0 && !isCatalogLoading && (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
+                    {selectedDataset
+                        ? <>
+                            <MessageSquareDashed size={52} className="mb-4 opacity-60 stroke-1" />
+                            <p className="text-xl font-medium">Chat with '{selectedDataset.name}'</p>
+                            <p className="text-sm mt-1">Ask questions, generate SQL, or get summaries about this dataset.</p>
+                          </>
+                        : <>
+                            <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
+                            <p className="text-xl font-medium">Dataset Chat</p>
+                            <p className="text-sm mt-1">Select a dataset from 'Quick Access' or the dropdown above to begin contextual chat.</p>
+                          </>
+                    }
+                </div>
+                )}
+                {chatMessages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
+                ))}
               </div>
-              )}
-              {chatMessages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
-              ))}
             </ScrollArea>
             <ChatInput
               onSubmitQuery={sendMessage}
@@ -164,16 +166,18 @@ export default function DashboardPage() {
                <p className="text-sm text-muted-foreground px-1">Ask questions about any dataset or table in the entire catalog.</p>
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={globalChatScrollAreaRef}>
-              {globalChatMessages.length === 0 && !isCatalogLoading && (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
-                    <Globe size={52} className="mb-4 opacity-60 stroke-1" />
-                    <p className="text-xl font-medium">Global Catalog Chat</p>
-                    <p className="text-sm mt-1">Ask questions about any dataset, compare datasets, or find specific tables across the catalog.</p>
-                </div>
-              )}
-              {globalChatMessages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
-              ))}
+              <div className="flex flex-col justify-end min-h-full">
+                {globalChatMessages.length === 0 && !isCatalogLoading && (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
+                      <Globe size={52} className="mb-4 opacity-60 stroke-1" />
+                      <p className="text-xl font-medium">Global Catalog Chat</p>
+                      <p className="text-sm mt-1">Ask questions about any dataset, compare datasets, or find specific tables across the catalog.</p>
+                  </div>
+                )}
+                {globalChatMessages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
+                ))}
+              </div>
             </ScrollArea>
             <ChatInput
               onSubmitQuery={sendGlobalChatMessage}
