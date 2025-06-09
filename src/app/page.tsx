@@ -127,7 +127,7 @@ export default function DashboardPage() {
           </TabsList>
 
           <TabsContent value="dataset-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
-            <div className="p-4 border-b border-border/50">
+            <div className="p-4 border-b border-border/50 h-24 flex flex-col justify-center">
               <DatasetSelector />
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={datasetChatScrollAreaRef}>
@@ -160,7 +160,7 @@ export default function DashboardPage() {
           </TabsContent>
 
           <TabsContent value="global-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
-            <div className="p-4 border-b border-border/50 h-[70.5px] flex items-center"> {/* Height to match DatasetSelector area */}
+            <div className="p-4 border-b border-border/50 h-24 flex items-center">
                <p className="text-sm text-muted-foreground px-1">Ask questions about any dataset or table in the entire catalog.</p>
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={globalChatScrollAreaRef}>
