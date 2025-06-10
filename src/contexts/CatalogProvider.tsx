@@ -13,16 +13,19 @@ interface CatalogContextType {
   catalog: CatalogData | null;
   selectedDataset: EnrichedDataset | null;
   selectedTable: EnrichedTable | null;
-  isLoading: boolean; // General loading for catalog fetch/upload
-  isEnriching: boolean; // Specific loading for enrichment actions
+  isLoading: boolean; 
+  isEnriching: boolean; 
   error: string | null;
+  
+  // Dataset-specific chat
   chatMessages: AppChatMessage[];
   isChatLoading: boolean;
+  sendMessage: (message: string) => Promise<void>;
+
   fetchCatalog: () => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
   selectDataset: (datasetName: string | null) => void;
   selectTable: (tableId: string | null) => void;
-  sendMessage: (message: string) => Promise<void>;
   updateMetadataField: (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => Promise<void>;
   enrichDataset: (datasetName: string) => Promise<void>;
   enrichTable: (datasetName: string, tableName: string) => Promise<void>;
@@ -36,10 +39,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [selectedDataset, setSelectedDataset] = useState<EnrichedDataset | null>(null);
   const [selectedTable, setSelectedTable] = useState<EnrichedTable | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false); // Used for dataset/table enrichment & SQL key enrichment
+  const [isEnriching, setIsEnriching] = useState(false); 
   const [error, setError] = useState<string | null>(null);
+  
   const [chatMessages, setChatMessages] = useState<AppChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+
   const { toast } = useToast();
 
   const [currentSelectedDatasetId, setCurrentSelectedDatasetId] = useState<string | null>(null);
@@ -97,7 +102,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     if (!datasetName) {
       setCurrentSelectedDatasetId(null);
       setCurrentSelectedTableId(null); 
-      setChatMessages([]);
+      setChatMessages([]); 
       return;
     }
     const ds = catalog?.datasets.find(d => d.name === datasetName);
@@ -134,7 +139,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setCurrentSelectedTableId(null);
       setSelectedDataset(null);
       setSelectedTable(null);
-      setChatMessages([]);
+      setChatMessages([]); 
       toast({ title: "Success", description: "File uploaded successfully. You can now enrich datasets/tables individually." });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -196,7 +201,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   };
 
   const enrichKeysWithSql = async (sqlQuery: string, datasetName: string, tableName?: string) => {
-    setIsEnriching(true); // Reuse isEnriching for loading state
+    setIsEnriching(true); 
     setError(null);
     try {
       const response = await fetch('/api/catalog/enrich-keys-sql', {
@@ -204,11 +209,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sqlQuery, datasetName, tableName }),
       });
-      const data = await response.json(); // Always parse JSON, even for errors
+      const data = await response.json(); 
       if (!response.ok) {
         throw new Error(data.error || `Failed to enrich keys for ${tableName || datasetName}`);
       }
-      setCatalog(data.catalog); // Update catalog with new key info
+      setCatalog(data.catalog); 
       toast({ 
         title: "Keys Enriched via SQL", 
         description: data.summary || data.message,
@@ -267,7 +272,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setIsChatLoading(false);
     }
   };
-
+  
   const updateMetadataField = async (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => {
     let itemType: 'dataset' | 'table' | 'column' | null = null;
     const parts = itemId.split('/');
@@ -322,8 +327,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   return (
     <CatalogContext.Provider value={{
       catalog, selectedDataset, selectedTable, isLoading, isEnriching, error,
-      chatMessages, isChatLoading, fetchCatalog, uploadFile, selectDataset,
-      selectTable, sendMessage, updateMetadataField, enrichDataset, enrichTable,
+      chatMessages, isChatLoading, sendMessage,
+      fetchCatalog, uploadFile, selectDataset,
+      selectTable, updateMetadataField, enrichDataset, enrichTable,
       enrichKeysWithSql
     }}>
       {children}

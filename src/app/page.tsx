@@ -7,11 +7,10 @@ import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertCircle, MessageSquareDashed, ThumbsUp, Zap, Star, BarChartBig } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { AlertCircle, MessageSquareDashed, Zap, Star, BarChartBig, Columns } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EnrichedDataset } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -52,22 +51,30 @@ const FeaturedDatasetCard = ({ dataset }: { dataset: EnrichedDataset }) => {
 
 
 export default function DashboardPage() {
-  const { chatMessages, selectedDataset, isCatalogLoading, catalog, selectDataset } = useCatalog();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const { 
+    chatMessages, 
+    selectedDataset, 
+    isCatalogLoading, 
+    catalog, 
+    selectDataset, 
+    sendMessage, 
+    isChatLoading,
+  } = useCatalog();
+  
+  const chatScrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    if (chatScrollAreaRef.current) {
+      chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
   const featuredDatasets = useMemo(() => {
     if (!catalog?.datasets) return [];
-    // Simple logic: pick first 3, or randomize, or based on some metric
-    return catalog.datasets.slice(0, 3);
+    // Sort by name for consistent display, then take top 3
+    return [...catalog.datasets].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 3);
   }, [catalog]);
 
-  // Select a dataset when its card is clicked for chat context
   const handleDatasetSelectForChat = (datasetName: string) => {
     selectDataset(datasetName);
   };
@@ -81,7 +88,7 @@ export default function DashboardPage() {
             <Zap size={22} className="text-accent" /> Quick Access
           </h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Jump directly into your most relevant datasets.
+            Jump directly into your most relevant datasets. Click to select for contextual chat.
           </p>
         </div>
         <ScrollArea className="flex-1 pr-2">
@@ -91,7 +98,7 @@ export default function DashboardPage() {
           )}
           <div className="space-y-3">
             {featuredDatasets.map(ds => (
-              <div key={ds.id} onClick={() => handleDatasetSelectForChat(ds.name)}>
+              <div key={ds.id} onClick={() => handleDatasetSelectForChat(ds.name)} className="cursor-pointer">
                 <FeaturedDatasetCard dataset={ds} />
               </div>
             ))}
@@ -99,14 +106,15 @@ export default function DashboardPage() {
         </ScrollArea>
       </section>
 
-      {/* Right Panel: Chat Interface */}
+      {/* Right Panel: Dataset Context Chat Interface */}
       <section className="flex flex-col flex-grow h-full bg-card/70 backdrop-blur-sm rounded-lg border border-border/50 overflow-hidden shadow-lg">
-        <div className="p-4 border-b border-border/50">
+        <div className="p-4 border-b border-border/50 min-h-[8rem] flex flex-col justify-center items-start">
           <DatasetSelector />
         </div>
-        <ScrollArea className="flex-grow p-4 sm:p-6" ref={scrollAreaRef}>
-          {chatMessages.length === 0 && !isCatalogLoading && (
-             <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
+        <ScrollArea className="flex-grow p-4 sm:p-6" ref={chatScrollAreaRef}>
+          <div className="flex flex-col justify-end min-h-full">
+            {chatMessages.length === 0 && !isCatalogLoading && (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
                 {selectedDataset
                     ? <>
                         <MessageSquareDashed size={52} className="mb-4 opacity-60 stroke-1" />
@@ -115,17 +123,23 @@ export default function DashboardPage() {
                       </>
                     : <>
                         <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
-                        <p className="text-xl font-medium">Welcome to DataSage AI</p>
-                        <p className="text-sm mt-1">Select a dataset from 'Quick Access' or the dropdown to begin.</p>
+                        <p className="text-xl font-medium">Dataset Context Chat</p>
+                        <p className="text-sm mt-1">Select a dataset from 'Quick Access' or use the search above to begin contextual chat.</p>
                       </>
                 }
             </div>
-          )}
-          {chatMessages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
+            )}
+            {chatMessages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} />
+            ))}
+          </div>
         </ScrollArea>
-        <ChatInput />
+        <ChatInput
+          onSubmitQuery={sendMessage}
+          isLoading={isChatLoading}
+          placeholderText={selectedDataset ? `Ask about ${selectedDataset.name}...` : "Select a dataset to chat."}
+          disabled={!selectedDataset}
+        />
       </section>
     </div>
   );
