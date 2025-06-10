@@ -22,11 +22,6 @@ interface CatalogContextType {
   isChatLoading: boolean;
   sendMessage: (message: string) => Promise<void>;
 
-  // Global catalog chat
-  globalChatMessages: AppChatMessage[];
-  isGlobalChatLoading: boolean;
-  sendGlobalChatMessage: (message: string) => Promise<void>;
-
   fetchCatalog: () => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
   selectDataset: (datasetName: string | null) => void;
@@ -50,9 +45,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<AppChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  const [globalChatMessages, setGlobalChatMessages] = useState<AppChatMessage[]>([]);
-  const [isGlobalChatLoading, setIsGlobalChatLoading] = useState(false);
-
   const { toast } = useToast();
 
   const [currentSelectedDatasetId, setCurrentSelectedDatasetId] = useState<string | null>(null);
@@ -66,13 +58,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error('Failed to fetch catalog');
       const data: CatalogData = await response.json();
       setCatalog(data);
-      // Initialize global chat with a welcome message if catalog is loaded
-      if (data && data.datasets.length > 0 && globalChatMessages.length === 0) {
-        setGlobalChatMessages([{ id: Date.now().toString() + '-global-welcome', sender: 'ai', content: "Welcome to Global Catalog Chat! How can I help you explore all datasets?", timestamp: new Date() }]);
-      } else if ((!data || data.datasets.length === 0) && globalChatMessages.length === 0) {
-        setGlobalChatMessages([{ id: Date.now().toString() + '-global-empty', sender: 'ai', content: "The data catalog is currently empty. Please upload data via the Admin page to enable global chat.", timestamp: new Date() }]);
-      }
-
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(newError);
@@ -80,7 +65,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, globalChatMessages.length]); // Added globalChatMessages.length dependency
+  }, [toast]); 
 
   useEffect(() => { 
     fetchCatalog();
@@ -117,7 +102,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     if (!datasetName) {
       setCurrentSelectedDatasetId(null);
       setCurrentSelectedTableId(null); 
-      setChatMessages([]); // Clear dataset-specific chat
+      setChatMessages([]); 
       return;
     }
     const ds = catalog?.datasets.find(d => d.name === datasetName);
@@ -154,13 +139,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setCurrentSelectedTableId(null);
       setSelectedDataset(null);
       setSelectedTable(null);
-      setChatMessages([]); // Clear dataset chat
-      // Reset global chat welcome message based on new catalog state
-      if (data.catalog && data.catalog.datasets.length > 0) {
-        setGlobalChatMessages([{ id: Date.now().toString() + '-global-welcome-upload', sender: 'ai', content: "Catalog updated. Welcome to Global Catalog Chat! How can I help you explore all datasets?", timestamp: new Date() }]);
-      } else {
-        setGlobalChatMessages([{ id: Date.now().toString() + '-global-empty-upload', sender: 'ai', content: "Catalog updated, but it's empty. Please upload data via the Admin page to enable global chat.", timestamp: new Date() }]);
-      }
+      setChatMessages([]); 
       toast({ title: "Success", description: "File uploaded successfully. You can now enrich datasets/tables individually." });
     } catch (err) {
       const newError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -294,38 +273,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   };
   
-  const sendGlobalChatMessage = async (message: string) => {
-    const userMessage: AppChatMessage = { id: Date.now().toString() + '-global', sender: 'user', content: message, timestamp: new Date() };
-    const historyToPass: ChatMessageHistory[] = globalChatMessages.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }],
-      }));
-    setGlobalChatMessages(prev => [...prev, userMessage]);
-    setIsGlobalChatLoading(true);
-    try {
-      const response = await fetch('/api/global-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: message, history: historyToPass }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get response from Global AI Chat');
-      }
-      const data = await response.json();
-      const aiMessage: AppChatMessage = { id: (Date.now() + 1).toString() + '-global-ai', sender: 'ai', content: data.response, timestamp: new Date() };
-      setGlobalChatMessages(prev => [...prev, aiMessage]);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred with the global chat API.';
-      const aiError: AppChatMessage = { id: (Date.now() + 1).toString() + '-global-ai-err', sender: 'ai', content: `Error: ${errorMessage}`, timestamp: new Date() };
-      setGlobalChatMessages(prev => [...prev, aiError]);
-      toast({ title: "Global Chat Error", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsGlobalChatLoading(false);
-    }
-  };
-
-
   const updateMetadataField = async (itemId: string, fieldKey: 'description' | 'tags', newValue: string) => {
     let itemType: 'dataset' | 'table' | 'column' | null = null;
     const parts = itemId.split('/');
@@ -381,7 +328,6 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     <CatalogContext.Provider value={{
       catalog, selectedDataset, selectedTable, isLoading, isEnriching, error,
       chatMessages, isChatLoading, sendMessage,
-      globalChatMessages, isGlobalChatLoading, sendGlobalChatMessage,
       fetchCatalog, uploadFile, selectDataset,
       selectTable, updateMetadataField, enrichDataset, enrichTable,
       enrichKeysWithSql
