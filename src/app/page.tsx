@@ -7,11 +7,11 @@ import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useCatalog } from '@/contexts/CatalogProvider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertCircle, MessageSquareDashed, ThumbsUp, Zap, Star, BarChartBig } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertCircle, MessageSquareDashed, Zap, Star, BarChartBig, Globe, Columns } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EnrichedDataset } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -52,24 +52,39 @@ const FeaturedDatasetCard = ({ dataset }: { dataset: EnrichedDataset }) => {
 
 
 export default function DashboardPage() {
-  const { chatMessages, selectedDataset, isCatalogLoading, catalog, selectDataset } = useCatalog();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const { 
+    chatMessages, 
+    selectedDataset, 
+    isCatalogLoading, 
+    catalog, 
+    selectDataset, 
+    sendMessage, 
+    isChatLoading,
+    globalChatMessages,
+    isGlobalChatLoading,
+    sendGlobalChatMessage
+  } = useCatalog();
+  
+  const datasetChatScrollAreaRef = useRef<HTMLDivElement>(null);
+  const globalChatScrollAreaRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState("global-chat"); // Default to global-chat
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    if (activeTab === "dataset-chat" && datasetChatScrollAreaRef.current) {
+      datasetChatScrollAreaRef.current.scrollTop = datasetChatScrollAreaRef.current.scrollHeight;
+    } else if (activeTab === "global-chat" && globalChatScrollAreaRef.current) {
+      globalChatScrollAreaRef.current.scrollTop = globalChatScrollAreaRef.current.scrollHeight;
     }
-  }, [chatMessages]);
+  }, [chatMessages, globalChatMessages, activeTab]);
 
   const featuredDatasets = useMemo(() => {
     if (!catalog?.datasets) return [];
-    // Simple logic: pick first 3, or randomize, or based on some metric
     return catalog.datasets.slice(0, 3);
   }, [catalog]);
 
-  // Select a dataset when its card is clicked for chat context
   const handleDatasetSelectForChat = (datasetName: string) => {
     selectDataset(datasetName);
+    setActiveTab("dataset-chat"); // Switch to dataset chat tab when a dataset is selected
   };
 
   return (
@@ -81,7 +96,7 @@ export default function DashboardPage() {
             <Zap size={22} className="text-accent" /> Quick Access
           </h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Jump directly into your most relevant datasets.
+            Jump directly into your most relevant datasets. Click to select for contextual chat.
           </p>
         </div>
         <ScrollArea className="flex-1 pr-2">
@@ -91,7 +106,7 @@ export default function DashboardPage() {
           )}
           <div className="space-y-3">
             {featuredDatasets.map(ds => (
-              <div key={ds.id} onClick={() => handleDatasetSelectForChat(ds.name)}>
+              <div key={ds.id} onClick={() => handleDatasetSelectForChat(ds.name)} className="cursor-pointer">
                 <FeaturedDatasetCard dataset={ds} />
               </div>
             ))}
@@ -99,33 +114,78 @@ export default function DashboardPage() {
         </ScrollArea>
       </section>
 
-      {/* Right Panel: Chat Interface */}
+      {/* Right Panel: Chat Interface with Tabs */}
       <section className="flex flex-col flex-grow h-full bg-card/70 backdrop-blur-sm rounded-lg border border-border/50 overflow-hidden shadow-lg">
-        <div className="p-4 border-b border-border/50">
-          <DatasetSelector />
-        </div>
-        <ScrollArea className="flex-grow p-4 sm:p-6" ref={scrollAreaRef}>
-          {chatMessages.length === 0 && !isCatalogLoading && (
-             <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
-                {selectedDataset
-                    ? <>
-                        <MessageSquareDashed size={52} className="mb-4 opacity-60 stroke-1" />
-                        <p className="text-xl font-medium">Chat with '{selectedDataset.name}'</p>
-                        <p className="text-sm mt-1">Ask questions, generate SQL, or get summaries about this dataset.</p>
-                      </>
-                    : <>
-                        <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
-                        <p className="text-xl font-medium">Welcome to DataSage AI</p>
-                        <p className="text-sm mt-1">Select a dataset from 'Quick Access' or the dropdown to begin.</p>
-                      </>
-                }
+        <Tabs defaultValue="global-chat" className="flex flex-col h-full" onValueChange={setActiveTab} value={activeTab}>
+          <TabsList className="grid w-full grid-cols-2 rounded-none rounded-t-lg border-b border-border/50 bg-card/80">
+            <TabsTrigger value="global-chat" className="py-2.5 text-sm data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-none">
+              <Globe size={16} className="mr-2" /> Global Catalog Chat
+            </TabsTrigger>
+            <TabsTrigger value="dataset-chat" className="py-2.5 text-sm data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-none">
+              <Columns size={16} className="mr-2" /> Dataset Context Chat
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="global-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
+            <div className="p-4 border-b border-border/50 min-h-[8rem] flex flex-col justify-center items-start"> {/* Adjusted height and flex properties */}
+               <p className="text-sm text-muted-foreground px-1">Ask questions about any dataset or table in the entire catalog.</p>
             </div>
-          )}
-          {chatMessages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
-        </ScrollArea>
-        <ChatInput />
+            <ScrollArea className="flex-grow p-4 sm:p-6" ref={globalChatScrollAreaRef}>
+              <div className="flex flex-col justify-end min-h-full">
+                {globalChatMessages.length === 0 && !isCatalogLoading && (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
+                      <Globe size={52} className="mb-4 opacity-60 stroke-1" />
+                      <p className="text-xl font-medium">Global Catalog Chat</p>
+                      <p className="text-sm mt-1">Ask questions about any dataset, compare datasets, or find specific tables across the catalog.</p>
+                  </div>
+                )}
+                {globalChatMessages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
+                ))}
+              </div>
+            </ScrollArea>
+            <ChatInput
+              onSubmitQuery={sendGlobalChatMessage}
+              isLoading={isGlobalChatLoading}
+              placeholderText="Ask about the entire data catalog..."
+            />
+          </TabsContent>
+
+          <TabsContent value="dataset-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
+            <div className="p-4 border-b border-border/50 min-h-[8rem] flex flex-col justify-center items-start"> {/* Adjusted height and flex properties */}
+              <DatasetSelector />
+            </div>
+            <ScrollArea className="flex-grow p-4 sm:p-6" ref={datasetChatScrollAreaRef}>
+              <div className="flex flex-col justify-end min-h-full">
+                {chatMessages.length === 0 && !isCatalogLoading && (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center px-4">
+                    {selectedDataset
+                        ? <>
+                            <MessageSquareDashed size={52} className="mb-4 opacity-60 stroke-1" />
+                            <p className="text-xl font-medium">Chat with '{selectedDataset.name}'</p>
+                            <p className="text-sm mt-1">Ask questions, generate SQL, or get summaries about this dataset.</p>
+                          </>
+                        : <>
+                            <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
+                            <p className="text-xl font-medium">Dataset Chat</p>
+                            <p className="text-sm mt-1">Select a dataset from 'Quick Access' or use search above to begin contextual chat.</p>
+                          </>
+                    }
+                </div>
+                )}
+                {chatMessages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
+                ))}
+              </div>
+            </ScrollArea>
+            <ChatInput
+              onSubmitQuery={sendMessage}
+              isLoading={isChatLoading}
+              placeholderText={selectedDataset ? `Ask about ${selectedDataset.name}...` : "Select a dataset to chat."}
+              disabled={!selectedDataset}
+            />
+          </TabsContent>
+        </Tabs>
       </section>
     </div>
   );

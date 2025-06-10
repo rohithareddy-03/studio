@@ -3,19 +3,29 @@
 "use client";
 
 import { useState, FormEvent } from 'react';
-import { useCatalog } from '@/contexts/CatalogProvider';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SendHorizonal, Loader2, CornerDownLeft } from 'lucide-react'; // Changed Send to SendHorizonal
+import { SendHorizonal, Loader2 } from 'lucide-react';
 
-export function ChatInput() {
+interface ChatInputProps {
+  onSubmitQuery: (query: string) => Promise<void>;
+  isLoading: boolean;
+  placeholderText: string;
+  disabled?: boolean; // Optional: if the input itself should be disabled
+}
+
+export function ChatInput({
+  onSubmitQuery,
+  isLoading,
+  placeholderText,
+  disabled = false,
+}: ChatInputProps) {
   const [message, setMessage] = useState('');
-  const { sendMessage, selectedDataset, isChatLoading } = useCatalog();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !selectedDataset) return;
-    await sendMessage(message.trim());
+    if (!message.trim() || disabled) return;
+    await onSubmitQuery(message.trim());
     setMessage('');
   };
 
@@ -25,13 +35,13 @@ export function ChatInput() {
         type="text"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder={selectedDataset ? `Ask about ${selectedDataset.name}...` : "Select a dataset to chat."}
-        className="flex-grow h-10 rounded-full bg-background focus:border-primary/70 pl-4 pr-12 text-sm" // Added rounded-full
-        disabled={!selectedDataset || isChatLoading}
+        placeholder={placeholderText}
+        className="flex-grow h-10 rounded-full bg-background focus:border-primary/70 pl-4 pr-12 text-sm"
+        disabled={disabled || isLoading}
         aria-label="Chat message input"
       />
-      <Button type="submit" disabled={!selectedDataset || isChatLoading || !message.trim()} size="icon" className="rounded-full w-10 h-10 bg-primary hover:bg-primary/90">
-        {isChatLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizonal size={20} />}
+      <Button type="submit" disabled={disabled || isLoading || !message.trim()} size="icon" className="rounded-full w-10 h-10 bg-primary hover:bg-primary/90">
+        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizonal size={20} />}
       </Button>
     </form>
   );
