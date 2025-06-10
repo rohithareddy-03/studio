@@ -9,45 +9,40 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Database, Search, X } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
-import type { EnrichedDataset } from '@/types';
+// No longer need EnrichedDataset type here for search results
 
 export function DatasetSelector() {
   const { catalog, selectedDataset, selectDataset, isLoading: isCatalogLoading } = useCatalog();
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<EnrichedDataset[] | null>(null);
+  const [searchResults, setSearchResults] = useState<string[] | null>(null); // Stores array of dataset names
   const [isSearching, setIsSearching] = useState(false);
-  const [displayedDatasets, setDisplayedDatasets] = useState<EnrichedDataset[]>([]);
+  const [displayedDatasets, setDisplayedDatasets] = useState<string[]>([]); // Stores array of dataset names
 
   const fetchDatasetsByQuery = useCallback(async (query: string) => {
-    if (!query) { // If query is empty, behave as if search is cleared
-      setSearchResults(null); // Will fall back to catalog.datasets
-      setDisplayedDatasets(catalog?.datasets || []);
-      return;
-    }
     setIsSearching(true);
     try {
       const response = await fetch(`/api/catalog/search-datasets?query=${encodeURIComponent(query)}`);
       if (!response.ok) {
         throw new Error('Failed to fetch search results');
       }
-      const data: { datasets: EnrichedDataset[] } = await response.json();
-      setSearchResults(data.datasets);
-      setDisplayedDatasets(data.datasets);
+      const data: { datasetNames: string[] } = await response.json();
+      setSearchResults(data.datasetNames);
+      setDisplayedDatasets(data.datasetNames);
     } catch (error) {
       console.error("Search error:", error);
-      setSearchResults([]); 
+      setSearchResults([]);
       setDisplayedDatasets([]);
     } finally {
       setIsSearching(false);
     }
-  }, [catalog?.datasets]);
+  }, []);
 
   // Initialize displayed datasets or update when catalog changes and no search is active
   useEffect(() => {
     if (!isCatalogLoading && catalog?.datasets) {
       if (searchResults === null) { // No active search results
-        setDisplayedDatasets(catalog.datasets);
-      } else { // Active search results exist, ensure they are the ones displayed
+        setDisplayedDatasets(catalog.datasets.map(d => d.name));
+      } else { // Active search results exist (already strings)
         setDisplayedDatasets(searchResults);
       }
     } else if (isCatalogLoading) {
@@ -57,12 +52,22 @@ export function DatasetSelector() {
 
 
   const handleSearch = () => {
-    fetchDatasetsByQuery(searchQuery.trim());
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) { // If query is empty after trim, show all datasets from catalog
+      setSearchResults(null); // Clear previous search results
+      if (catalog?.datasets) {
+        setDisplayedDatasets(catalog.datasets.map(d => d.name));
+      } else {
+        setDisplayedDatasets([]);
+      }
+      return;
+    }
+    fetchDatasetsByQuery(trimmedQuery);
   };
 
   const clearSearch = () => {
     setSearchQuery('');
-    setSearchResults(null); // This will trigger useEffect to display all catalog datasets
+    setSearchResults(null); // This will trigger useEffect to display all catalog datasets (as names)
   };
   
   const handleDatasetSelection = (value: string) => {
@@ -73,7 +78,7 @@ export function DatasetSelector() {
     }
   };
 
-  if (isCatalogLoading && !displayedDatasets.length) {
+  if (isCatalogLoading && !catalog?.datasets?.length && !displayedDatasets.length) {
     return (
       <div className="flex items-center space-x-2 py-2 px-1">
         <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -95,11 +100,11 @@ export function DatasetSelector() {
               placeholder="Search datasets by name, tag, or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 rounded-md bg-background/80 pr-10" // Increased pr for X button
+              className="h-10 rounded-md bg-background/80 pr-10"
               disabled={isSearching || isCatalogLoading}
-              onKeyDown={(e) => { // Changed from onKeyPress for broader compatibility
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  e.preventDefault(); // Prevent form submission if wrapped in one
+                  e.preventDefault();
                   handleSearch();
                 }
               }}
@@ -126,7 +131,7 @@ export function DatasetSelector() {
       <Select
         value={selectedDataset?.name || ""}
         onValueChange={handleDatasetSelection}
-        disabled={isSearching || isCatalogLoading}
+        disabled={isSearching || isCatalogLoading || (!isSearching && displayedDatasets.length === 0 && !catalog?.datasets?.length)}
       >
         <SelectTrigger id="dataset-select" className="w-full h-10 rounded-md bg-background/80 hover:border-primary/50">
           <div className="flex items-center gap-2 truncate">
@@ -135,7 +140,7 @@ export function DatasetSelector() {
           </div>
         </SelectTrigger>
         <SelectContent className="bg-popover border-border shadow-xl max-h-60">
-          {isSearching && displayedDatasets.length === 0 && searchResults !== null && ( // Show searching only if results are pending
+          {isSearching && displayedDatasets.length === 0 && searchResults !== null && (
              <div className="p-2 text-sm text-muted-foreground text-center">Searching...</div>
           )}
           {!isSearching && displayedDatasets.length === 0 && (
@@ -143,9 +148,9 @@ export function DatasetSelector() {
               {searchResults === null && !catalog?.datasets?.length ? 'No datasets available.' : 'No datasets match your search.'}
             </div>
           )}
-          {displayedDatasets.map((dataset) => (
-            <SelectItem key={dataset.id} value={dataset.name} className="hover:bg-primary/10 focus:bg-primary/10">
-              <span className="truncate" title={dataset.name}>{dataset.name}</span>
+          {displayedDatasets.map((datasetName) => ( // datasetName is now a string
+            <SelectItem key={datasetName} value={datasetName} className="hover:bg-primary/10 focus:bg-primary/10">
+              <span className="truncate" title={datasetName}>{datasetName}</span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -153,3 +158,4 @@ export function DatasetSelector() {
     </div>
   );
 }
+

@@ -12,22 +12,25 @@ export async function GET(request: NextRequest) {
     const catalog = getCatalog(); // This loads from memory or disk
 
     if (!catalog || !catalog.datasets || catalog.datasets.length === 0) {
-      return NextResponse.json({ datasets: [] }, { status: 200 });
+      return NextResponse.json({ datasetNames: [] }, { status: 200 });
     }
+
+    let resultingDatasetNames: string[];
 
     if (!query) {
-      // If query is empty, return all datasets
-      return NextResponse.json({ datasets: catalog.datasets }, { status: 200 });
+      // If query is empty, return all dataset names
+      resultingDatasetNames = catalog.datasets.map(dataset => dataset.name);
+    } else {
+      const filteredDatasets = catalog.datasets.filter(dataset => {
+        const nameMatch = dataset.name.toLowerCase().includes(query);
+        const descriptionMatch = dataset.description?.toLowerCase().includes(query);
+        const tagsMatch = dataset.tags?.toLowerCase().includes(query);
+        return nameMatch || descriptionMatch || tagsMatch;
+      });
+      resultingDatasetNames = filteredDatasets.map(dataset => dataset.name);
     }
 
-    const filteredDatasets = catalog.datasets.filter(dataset => {
-      const nameMatch = dataset.name.toLowerCase().includes(query);
-      const descriptionMatch = dataset.description?.toLowerCase().includes(query);
-      const tagsMatch = dataset.tags?.toLowerCase().includes(query);
-      return nameMatch || descriptionMatch || tagsMatch;
-    });
-
-    return NextResponse.json({ datasets: filteredDatasets }, { status: 200 });
+    return NextResponse.json({ datasetNames: resultingDatasetNames }, { status: 200 });
 
   } catch (error) {
     console.error('Search Datasets API Error:', error);
@@ -35,3 +38,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Failed to search datasets: ${errorMessage}` }, { status: 500 });
   }
 }
+
