@@ -127,7 +127,7 @@ export default function DashboardPage() {
           </TabsList>
 
           <TabsContent value="global-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
-            <div className="p-4 border-b border-border/50 h-24 flex items-center">
+            <div className="p-4 border-b border-border/50 min-h-[8rem] flex flex-col justify-center items-start"> {/* Adjusted height and flex properties */}
                <p className="text-sm text-muted-foreground px-1">Ask questions about any dataset or table in the entire catalog.</p>
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={globalChatScrollAreaRef}>
@@ -152,7 +152,7 @@ export default function DashboardPage() {
           </TabsContent>
 
           <TabsContent value="dataset-chat" className="flex flex-col flex-grow m-0 overflow-hidden">
-            <div className="p-4 border-b border-border/50 h-24 flex flex-col justify-center">
+            <div className="p-4 border-b border-border/50 min-h-[8rem] flex flex-col justify-center items-start"> {/* Adjusted height and flex properties */}
               <DatasetSelector />
             </div>
             <ScrollArea className="flex-grow p-4 sm:p-6" ref={datasetChatScrollAreaRef}>
@@ -168,7 +168,7 @@ export default function DashboardPage() {
                         : <>
                             <AlertCircle size={52} className="mb-4 opacity-60 stroke-1" />
                             <p className="text-xl font-medium">Dataset Chat</p>
-                            <p className="text-sm mt-1">Select a dataset from 'Quick Access' or the dropdown above to begin contextual chat.</p>
+                            <p className="text-sm mt-1">Select a dataset from 'Quick Access' or use search above to begin contextual chat.</p>
                           </>
                     }
                 </div>
